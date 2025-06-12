@@ -1,0 +1,16 @@
+[project]
+name = "sync-toggl-track-events"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "connectorx>=0.4.3",
+    "fastapi[standard]>=0.115.12",
+    "httpx>=0.28.1",
+    "ipykernel>=6.29.5",
+    "pandas>=2.3.0",
+    "polars>=1.30.0",
+    "pyarrow>=20.0.0",
+    "uvicorn[standard]>=0.34.3",
+]
