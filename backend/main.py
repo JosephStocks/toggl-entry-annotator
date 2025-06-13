@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import date, datetime, timezone
+from datetime import datetime
 import sqlite3
 import json
 
