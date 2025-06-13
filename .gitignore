@@ -12,3 +12,6 @@ wheels/
 *.sqlite
 digest.txt
 .env
+
+!README.md
+*.md
