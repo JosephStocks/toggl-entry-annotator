@@ -18,14 +18,24 @@ export function todayWindowUTC(cutoff = 4) {
 export function getDateWindowUTC(date: Date, cutoff = 4) {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    // Create local start time (e.g., 4 AM on the given date)
-    const localStart = new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        cutoff
-    );
+    // Get local date parts
+    const local = new Date(date.toLocaleString('en-US', { timeZone: tz }));
+    let year = local.getFullYear();
+    let month = local.getMonth();
+    let day = local.getDate();
+    let hour = local.getHours();
 
+    // If before cutoff, anchor to previous day
+    if (hour < cutoff) {
+        const prev = new Date(local);
+        prev.setDate(day - 1);
+        year = prev.getFullYear();
+        month = prev.getMonth();
+        day = prev.getDate();
+    }
+
+    // Create local start time (cutoff hour)
+    const localStart = new Date(year, month, day, cutoff);
     // End time is cutoff hour of the next day
     const localEnd = addDays(localStart, 1);
 

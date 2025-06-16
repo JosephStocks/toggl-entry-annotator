@@ -18,6 +18,19 @@ describe('getDateWindowUTC', () => {
         expect(startIso).toBe('2025-01-01T10:00:00.000Z');
         expect(endIso).toBe('2025-01-02T10:00:00.000Z');
     });
+
+    it('assigns 1am entry to previous day when cutoff is 4am', () => {
+        // 1:30am local time, America/Chicago, Jan 2, 2025
+        const date = new Date('2025-01-02T01:30:00-06:00'); // 1:30am CST
+        const { startIso, endIso } = getDateWindowUTC(date, 4);
+        // The window should be Jan 1, 4am CST (2025-01-01T10:00:00.000Z) to Jan 2, 4am CST (2025-01-02T10:00:00.000Z)
+        expect(startIso).toBe('2025-01-01T10:00:00.000Z');
+        expect(endIso).toBe('2025-01-02T10:00:00.000Z');
+        // 1:30am CST (2025-01-02T07:30:00.000Z) is within this window
+        const entryTime = new Date('2025-01-02T07:30:00.000Z');
+        expect(entryTime >= new Date(startIso)).toBe(true);
+        expect(entryTime < new Date(endIso)).toBe(true);
+    });
 });
 
 describe('formatTimeRange', () => {
