@@ -117,7 +117,7 @@ def get_time_entries(
     end_iso: datetime = Query(
         ..., description="Exclusive ISO 8601 UTC datetime (e.g. 2025-06-13T04:00:00Z)"
     ),
-):
+) -> List[TimeEntryWithNotes]:
     if start_iso >= end_iso:
         raise HTTPException(400, "start_iso must be < end_iso")
 
@@ -161,7 +161,7 @@ def get_time_entries(
 
 
 @app.post("/notes", status_code=201)
-def create_note(note: NoteCreate):
+def create_note(note: NoteCreate) -> dict[str, str]:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
@@ -174,7 +174,7 @@ def create_note(note: NoteCreate):
 
 
 @app.delete("/notes/{note_id}")
-def delete_note(note_id: int):
+def delete_note(note_id: int) -> dict[str, str]:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("DELETE FROM entry_notes WHERE id = ?", (note_id,))

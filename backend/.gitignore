@@ -12,6 +12,8 @@ wheels/
 *.sqlite
 digest.txt
 .env
+.pytest_cache/
 
+# Ignore all markdown files except for the README markdown
 !README.md
 *.md

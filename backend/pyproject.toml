@@ -14,3 +14,8 @@ dependencies = [
     "pyarrow>=20.0.0",
     "uvicorn[standard]>=0.34.3",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+]
