@@ -169,7 +169,7 @@ export default function App() {
       {/* Loading State */}
       {loading && (
         <div className="flex justify-center py-8">
-          <Loader />
+          <Loader role="status" />
         </div>
       )}
 
