@@ -1,3 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" font-size="52">🕒</text>
-</svg> 
+<!-- /public/favicon.svg (128 x 128 viewbox) -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 128 128" width="128" height="128">
+  <!-- Base clock, centred -->
+  <text x="60" y="68"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-size="104">🕒</text>
+
+  <!-- Writing-hand overlay: smaller & nudged down-right -->
+  <text x="100" y="92"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-size="84">✍️</text>
+</svg>
+
