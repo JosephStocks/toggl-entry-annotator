@@ -225,11 +225,20 @@ export default function App() {
     }
   }, [currentDate]);
 
-  // Useeffect for initial load and for running timer
+  // Useeffect for initial load and date changes
   useEffect(() => {
     loadEntries();
+  }, [loadEntries]);
 
-    if (!currentEntry) return;
+  // Useeffect for running timer
+  useEffect(() => {
+    if (!currentEntry) {
+      setRunningDuration('');
+      return;
+    }
+
+    // Set initial value immediately and then start the timer
+    setRunningDuration(formatRunningDuration(currentEntry.start));
 
     const timer = setInterval(() => {
       setRunningDuration(formatRunningDuration(currentEntry.start));
@@ -237,7 +246,7 @@ export default function App() {
 
     // Cleanup
     return () => clearInterval(timer);
-  }, [loadEntries, currentEntry]);
+  }, [currentEntry]);
 
   const handlePreviousDay = () => {
     setCurrentDate(prev => subDays(prev, 1));
