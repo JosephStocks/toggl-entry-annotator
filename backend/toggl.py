@@ -4,12 +4,16 @@ import httpx
 import os
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Tuple, Dict, Any
+import logging
 
 from dotenv import load_dotenv
 
 import cache
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 DB_PATH = "time_tracking.sqlite"
 TOGGL_TOKEN = os.environ.get("TOGGL_TOKEN")
@@ -87,15 +91,25 @@ def sync_time_entries(start_date: date, end_date: date) -> int:
     payload = {
         "start_date": start_date.strftime("%Y-%m-%d"),
         "end_date": end_date.strftime("%Y-%m-%d"),
-        "page_size": 150,
+        "page_size": 100,
         "enrich_response": True,
+        "grouped": True,
     }
 
     records_synced = 0
     with httpx.Client(auth=auth, timeout=30) as client:
         while True:
+            logger.info(
+                f"Requesting Toggl data with payload: {json.dumps(payload, indent=2)}"
+            )
             resp = client.post(url, json=payload)
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                logger.error(f"Toggl API request failed: {exc}")
+                logger.error(f"Response text: {exc.response.text}")
+                raise exc
+
             rows = resp.json()
 
             if not rows:
@@ -133,7 +147,7 @@ def sync_time_entries(start_date: date, end_date: date) -> int:
             nxt = resp.headers.get("X-Next-ID")
             if not nxt:
                 break
-            payload["first_id"] = nxt
+            payload["first_id"] = int(nxt)
     return records_synced
 
 

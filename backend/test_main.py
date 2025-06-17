@@ -1,9 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app, _epoch_from_dt
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 import sqlite3
 import os
+from unittest.mock import patch, call
 
 client = TestClient(app)
 
@@ -170,4 +171,34 @@ def test_get_current_entry_none(mock_get_no_current_entry):
     response = client.get("/sync/current")
     assert response.status_code == 200
     assert response.json() is None
-    mock_get_no_current_entry.assert_called_once() 
+    mock_get_no_current_entry.assert_called_once()
+
+@patch("main.date")
+def test_sync_full_endpoint_chunks_requests(mock_date, mock_sync_time_entries):
+    """
+    Tests that the /sync/full endpoint correctly chunks requests by year.
+    """
+    # Freeze time to a known date
+    mock_date.today.return_value = date(2025, 6, 17)
+
+    # Mock the environment variable for start date
+    with patch.dict(os.environ, {"SYNC_START_DATE": "2023-01-15"}):
+        response = client.post("/sync/full")
+
+    assert response.status_code == 200
+    json_data = response.json()
+    assert json_data["ok"] is True
+    # mock returns 5, so 3 calls should be 15
+    assert json_data["records_synced"] == 15
+
+    # Check that our mock was called with the correct date ranges
+    expected_calls = [
+        # 1. From start date to +364 days (2023 is not a leap year)
+        call(date(2023, 1, 15), date(2024, 1, 14)),
+        # 2. From the next day to +364 days (2024 IS a leap year)
+        call(date(2024, 1, 15), date(2025, 1, 13)),
+        # 3. From the next day to the mocked "today"
+        call(date(2025, 1, 14), date(2025, 6, 17)),
+    ]
+    mock_sync_time_entries.assert_has_calls(expected_calls)
+    assert mock_sync_time_entries.call_count == len(expected_calls) 

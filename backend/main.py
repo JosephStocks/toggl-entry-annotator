@@ -5,6 +5,8 @@ from typing import List, Optional
 from datetime import datetime, date, timedelta
 import sqlite3
 import json
+import logging
+import os
 
 import toggl
 
@@ -12,6 +14,9 @@ import toggl
 # Config
 # -------------------------------------------------
 DB_PATH = "time_tracking.sqlite"  # keep one truth‑source name
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.add_middleware(
@@ -86,19 +91,43 @@ def sync_full():
     Fetches all time entries from the Toggl Detailed Reports API from the beginning
     of time until today and upserts them into the local database.
 
-    This can take a while and should be used for initial setup or to repair data.
+    Data is fetched in yearly chunks to respect the Toggl API's 366-day limit.
+    The start date can be configured with the SYNC_START_DATE env var (YYYY-MM-DD).
     """
     try:
-        # Toggl was founded in 2006
-        start_date = date(2006, 1, 1)
-        end_date = date.today()
-        count = toggl.sync_time_entries(start_date, end_date)
+        total_synced_count = 0
+        start_date_str = os.environ.get("SYNC_START_DATE", "2006-01-01")
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            logger.warning(
+                f"Invalid SYNC_START_DATE format: '{start_date_str}'. "
+                "Please use YYYY-MM-DD. Defaulting to 2006-01-01."
+            )
+            start_date = date(2006, 1, 1)
+
+        end_date_of_sync = date.today()
+
+        current_start = start_date
+        while current_start <= end_date_of_sync:
+            current_end = current_start + timedelta(days=364)  # 365 days inclusive
+            if current_end > end_date_of_sync:
+                current_end = end_date_of_sync
+
+            logger.info(f"Syncing Toggl data from {current_start} to {current_end}")
+            count = toggl.sync_time_entries(current_start, current_end)
+            total_synced_count += count
+
+            # Move to the next chunk
+            current_start = current_end + timedelta(days=1)
+
         return {
             "ok": True,
-            "records_synced": count,
-            "message": f"Full sync completed. Synced {count} records.",
+            "records_synced": total_synced_count,
+            "message": f"Full sync completed. Synced {total_synced_count} records.",
         }
     except Exception as e:
+        logger.error(f"Full sync failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
