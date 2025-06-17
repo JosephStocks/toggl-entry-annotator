@@ -7,6 +7,30 @@ import os
 
 client = TestClient(app)
 
+# --- Mocks for Toggl API calls ---
+@pytest.fixture
+def mock_sync_time_entries(mocker):
+    """Mocks the toggl.sync_time_entries function."""
+    return mocker.patch("main.toggl.sync_time_entries", return_value=5)
+
+@pytest.fixture
+def mock_get_current_entry(mocker):
+    """Mocks the toggl.get_current_running_entry function."""
+    mock_data = {
+        "id": 12345,
+        "description": "Testing the current entry",
+        "start": "2025-01-01T10:00:00Z",
+        "duration": -1735725600,
+        "project_id": 987,
+        "project_name": "API Testing",
+    }
+    return mocker.patch("main.toggl.get_current_running_entry", return_value=mock_data)
+
+@pytest.fixture
+def mock_get_no_current_entry(mocker):
+    """Mocks the toggl.get_current_running_entry to return None."""
+    return mocker.patch("main.toggl.get_current_running_entry", return_value=None)
+
 # Use a test DB for isolation
 test_db_path = "test_time_tracking.sqlite"
 
@@ -118,4 +142,32 @@ def test_time_entries_date_range_edges():
     assert resp.status_code == 200
     ids = [e["entry_id"] for e in resp.json()]
     # Should include 10 (at start), 11 (middle), 14 (just before end), but not 12 (at end) or 13 (before start)
-    assert set(ids) == {10, 11, 14} 
+    assert set(ids) == {10, 11, 14}
+
+# --- Tests for Sync Endpoints ---
+
+def test_sync_recent_endpoint(mock_sync_time_entries):
+    """Tests the /sync/recent endpoint."""
+    response = client.post("/sync/recent")
+    assert response.status_code == 200
+    json = response.json()
+    assert json["ok"] is True
+    assert json["records_synced"] == 5
+    # Check that our mock was called
+    mock_sync_time_entries.assert_called_once()
+
+def test_get_current_entry_endpoint(mock_get_current_entry):
+    """Tests the /sync/current endpoint when an entry is running."""
+    response = client.get("/sync/current")
+    assert response.status_code == 200
+    json = response.json()
+    assert json["id"] == 12345
+    assert json["project_name"] == "API Testing"
+    mock_get_current_entry.assert_called_once()
+
+def test_get_current_entry_none(mock_get_no_current_entry):
+    """Tests the /sync/current endpoint when no entry is running."""
+    response = client.get("/sync/current")
+    assert response.status_code == 200
+    assert response.json() is None
+    mock_get_no_current_entry.assert_called_once() 

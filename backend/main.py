@@ -2,9 +2,11 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import sqlite3
 import json
+
+import toggl
 
 # -------------------------------------------------
 # Config
@@ -52,6 +54,12 @@ class NoteCreate(BaseModel):
     note_text: str
 
 
+class SyncResult(BaseModel):
+    ok: bool
+    records_synced: int
+    message: str
+
+
 # -------------------------------------------------
 # Helpers
 # -------------------------------------------------
@@ -65,6 +73,72 @@ def _epoch_from_dt(dt: datetime) -> int:
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
         raise ValueError("Datetime must be timezone-aware (RFC3339/ISO-8601)")
     return int(dt.timestamp())  # floor => second precision
+
+
+# -------------------------------------------------
+# Sync Routes
+# -------------------------------------------------
+
+
+@app.post("/sync/full", response_model=SyncResult, summary="Run a full sync from Toggl")
+def sync_full():
+    """
+    Fetches all time entries from the Toggl Detailed Reports API from the beginning
+    of time until today and upserts them into the local database.
+
+    This can take a while and should be used for initial setup or to repair data.
+    """
+    try:
+        # Toggl was founded in 2006
+        start_date = date(2006, 1, 1)
+        end_date = date.today()
+        count = toggl.sync_time_entries(start_date, end_date)
+        return {
+            "ok": True,
+            "records_synced": count,
+            "message": f"Full sync completed. Synced {count} records.",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/sync/recent", response_model=SyncResult, summary="Run a sync for recent entries"
+)
+def sync_recent():
+    """
+    Fetches time entries from the last 2 days to capture recent changes and
+    additions. This is much faster than a full sync.
+    """
+    try:
+        end_date = date.today()
+        start_date = end_date - timedelta(days=2)
+        count = toggl.sync_time_entries(start_date, end_date)
+        return {
+            "ok": True,
+            "records_synced": count,
+            "message": f"Recent sync completed. Synced {count} records.",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get(
+    "/sync/current",
+    summary="Get the current running time entry",
+    description="Fetches the single currently running time entry from Toggl, if one exists.",
+)
+def get_current_entry():
+    """
+    Note: The detailed report *excludes* the current entry. This endpoint is the
+    only way to get it. The result is returned directly from the Toggl API v9
+    and is not stored in the database. Returns null if no entry is running.
+    """
+    try:
+        entry = toggl.get_current_running_entry()
+        return entry
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -------------------------------------------------

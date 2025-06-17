@@ -1,6 +1,30 @@
-import { useEffect, useState } from 'react';
-import { Card, Text, Group, Button, TextInput, Loader, Stack, Title, ActionIcon } from '@mantine/core';
-import { IconChevronLeft, IconChevronRight, IconCalendar } from '@tabler/icons-react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+} from 'react';
+import {
+  Card,
+  Text,
+  Group,
+  Button,
+  TextInput,
+  Loader,
+  Stack,
+  Title,
+  ActionIcon,
+  Collapse,
+  Alert,
+} from '@mantine/core';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconCalendar,
+  IconPlayerPlay,
+  IconInfoCircle,
+  IconRefresh,
+  IconClock,
+} from '@tabler/icons-react';
 import { format, addDays, subDays } from 'date-fns';
 import { getDateWindowUTC } from './utils/time.ts';
 
@@ -14,34 +38,149 @@ type Entry = {
   start: string;
   notes: Note[];
 };
+// Toggl API v9 returns a slightly different shape for the current entry
+type CurrentEntry = {
+  id: number;
+  description: string;
+  project_name: string;
+  start: string;
+  duration: number; // is negative
+  project_id: number;
+};
 
-// --- Fetch helpers ----------------------------------------
-async function fetchEntriesForDate(date: Date): Promise<Entry[]> {
-  const { startIso, endIso } = getDateWindowUTC(date, 4);
-  const r = await fetch(
-    `/api/time_entries?start_iso=${encodeURIComponent(startIso)}&end_iso=${encodeURIComponent(endIso)}`
-  );
-  if (!r.ok) {
-    throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+type SyncResult = {
+  ok: boolean;
+  records_synced: number;
+  message: string;
+};
+
+// --- API Helpers ----------------------------------------
+const API_BASE = '/api';
+
+async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${url}`, options);
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(
+      `HTTP ${response.status} ${response.statusText}: ${errorBody}`
+    );
   }
-  return r.json();
+  // Handle cases where response might be empty (e.g., 204 No Content for current entry)
+  if (response.status === 204) {
+    return null as T;
+  }
+  return response.json();
 }
 
-async function addNote(entryId: number, text: string) {
-  const response = await fetch('/api/notes', {
+// --- Component-specific fetchers -------------------------
+const fetchEntriesForDate = (date: Date) => {
+  const { startIso, endIso } = getDateWindowUTC(date, 4);
+  return fetchApi<Entry[]>(
+    `/time_entries?start_iso=${encodeURIComponent(
+      startIso
+    )}&end_iso=${encodeURIComponent(endIso)}`
+  );
+};
+
+const addNote = (entryId: number, text: string) =>
+  fetchApi('/notes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ entry_id: entryId, note_text: text }),
   });
-  if (!response.ok) {
-    throw new Error('Failed to add note');
-  }
+
+const fetchCurrentEntry = () => fetchApi<CurrentEntry | null>('/sync/current');
+
+const runSync = (type: 'full' | 'recent') =>
+  fetchApi<SyncResult>(`/sync/${type}`, { method: 'POST' });
+
+
+// --- UI Components ----------------------------------------
+
+interface SyncPanelProps {
+  onSyncComplete: () => void;
 }
 
+function SyncPanel({ onSyncComplete }: SyncPanelProps) {
+  const [loading, setLoading] = useState<'full' | 'recent' | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSync = async (type: 'full' | 'recent') => {
+    setLoading(type);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await runSync(type);
+      setMessage(result.message);
+      onSyncComplete();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sync failed');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <Card withBorder shadow="sm" className="mb-4">
+      <Stack gap="sm">
+        <Group>
+          <IconRefresh size={20} />
+          <Title order={4}>Sync Toggl Data</Title>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Use these actions to pull data from the Toggl API into your local database.
+        </Text>
+        <Group>
+          <Button
+            onClick={() => handleSync('recent')}
+            loading={loading === 'recent'}
+            disabled={!!loading}
+            variant="light"
+            leftSection={<IconClock size={16} />}
+          >
+            Sync Recent (2 days)
+          </Button>
+          <Button
+            onClick={() => handleSync('full')}
+            loading={loading === 'full'}
+            disabled={!!loading}
+            color="gray"
+            variant="outline"
+          >
+            Run Full Sync
+          </Button>
+        </Group>
+        <Collapse in={!!message || !!error}>
+          {message && <Alert color="green" icon={<IconInfoCircle />}>{message}</Alert>}
+          {error && <Alert color="red" icon={<IconInfoCircle />}>{error}</Alert>}
+        </Collapse>
+      </Stack>
+    </Card>
+  );
+}
+
+
 // --- Helper functions ----------------------------------------
+function formatRunningDuration(start: string): string {
+  const ms = new Date().getTime() - new Date(start).getTime();
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const p = (n: number) => n.toString().padStart(2, '0');
+
+  if (hours > 0) {
+    return `${hours}:${p(minutes)}:${p(seconds)}`;
+  }
+  return `${p(minutes)}:${p(seconds)}`;
+}
+
 function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
+  const s = Math.abs(seconds); // use absolute for running timers
+  const hours = Math.floor(s / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
 
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
@@ -59,28 +198,44 @@ function isToday(date: Date): boolean {
 export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [currentEntry, setCurrentEntry] = useState<CurrentEntry | null>(null);
+  const [runningDuration, setRunningDuration] = useState('');
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch entries whenever currentDate changes
-  useEffect(() => {
-    const loadEntries = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchEntriesForDate(currentDate);
-        setEntries(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load entries');
-        setEntries([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadEntries();
+  const loadEntries = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [daily, current] = await Promise.all([
+        fetchEntriesForDate(currentDate),
+        fetchCurrentEntry(),
+      ]);
+      setEntries(daily);
+      setCurrentEntry(current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load entries');
+      setEntries([]);
+      setCurrentEntry(null);
+    } finally {
+      setLoading(false);
+    }
   }, [currentDate]);
+
+  // Useeffect for initial load and for running timer
+  useEffect(() => {
+    loadEntries();
+
+    if (!currentEntry) return;
+
+    const timer = setInterval(() => {
+      setRunningDuration(formatRunningDuration(currentEntry.start));
+    }, 1000);
+
+    // Cleanup
+    return () => clearInterval(timer);
+  }, [loadEntries, currentEntry]);
 
   const handlePreviousDay = () => {
     setCurrentDate(prev => subDays(prev, 1));
@@ -114,6 +269,28 @@ export default function App() {
 
   return (
     <Stack className="max-w-2xl mx-auto p-4">
+      {/* Sync Panel */}
+      <SyncPanel onSyncComplete={loadEntries} />
+
+      {/* Current Running Timer */}
+      {currentEntry && (
+        <Card withBorder shadow="sm" className="mb-4 bg-blue-50 border-blue-200">
+          <Group>
+            <IconPlayerPlay size={24} className="text-blue-500" />
+            <Stack gap={0}>
+              <Text fw={600}>{currentEntry.description || <span className="italic">No description</span>}</Text>
+              <Group>
+                <Text size="sm" c="dimmed">{currentEntry.project_name || 'No Project'}</Text>
+                <Text size="sm" c="dimmed">•</Text>
+                <Text size="sm" c="blue" fw={500}>
+                  {runningDuration}
+                </Text>
+              </Group>
+            </Stack>
+          </Group>
+        </Card>
+      )}
+
       {/* Date Navigation Header */}
       <Card shadow="sm" withBorder className="mb-4">
         <Group justify="space-between" align="center">
