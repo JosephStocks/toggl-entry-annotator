@@ -15,6 +15,7 @@ import {
   ActionIcon,
   Collapse,
   Alert,
+  Grid,
 } from '@mantine/core';
 import {
   IconChevronLeft,
@@ -27,6 +28,7 @@ import {
 } from '@tabler/icons-react';
 import { format, addDays, subDays } from 'date-fns';
 import { getDateWindowUTC } from './utils/time.ts';
+import { ProjectFilter } from './ProjectFilter.tsx';
 
 // --- Types mirroring your API ------------------------------------
 type Note = { id: number; note_text: string; created_at: string };
@@ -203,6 +205,7 @@ export default function App() {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
 
   const loadEntries = useCallback(async () => {
     try {
@@ -249,178 +252,176 @@ export default function App() {
     setCurrentDate(new Date());
   };
 
+  const handleSelectedProjectsChange = useCallback((projects: Set<string>) => {
+    setSelectedProjects(projects);
+  }, []);
+
   const handleAddNote = async (entryId: number) => {
-    const text = drafts[entryId]?.trim();
-    if (!text) return;
+    if (!drafts[entryId]?.trim()) return;
 
     try {
-      await addNote(entryId, text);
+      await addNote(entryId, drafts[entryId]?.trim());
       setDrafts({ ...drafts, [entryId]: '' });
-      // Refresh entries to show the new note
-      const refreshedEntries = await fetchEntriesForDate(currentDate);
-      setEntries(refreshedEntries);
+      // Refetch after adding
+      loadEntries();
     } catch (err) {
       setError('Failed to add note');
     }
   };
 
-  // Calculate total time for the day
-  const totalSeconds = entries?.reduce((sum, entry) => sum + entry.seconds, 0) || 0;
+  const filteredEntries = entries?.filter(entry => selectedProjects.has(entry.project_name)) ?? [];
+  const totalSeconds = filteredEntries.reduce((acc, e) => acc + e.seconds, 0);
 
   return (
-    <Stack className="max-w-2xl mx-auto p-4">
-      {/* Sync Panel */}
+    <div style={{ padding: '2rem' }}>
       <SyncPanel onSyncComplete={loadEntries} />
 
-      {/* Current Running Timer */}
-      {currentEntry && (
-        <Card withBorder shadow="sm" className="mb-4 bg-blue-50 border-blue-200">
-          <Group>
-            <IconPlayerPlay size={24} className="text-blue-500" />
-            <Stack gap={0}>
-              <Text fw={600}>{currentEntry.description || <span className="italic">No description</span>}</Text>
+      <Grid>
+        <Grid.Col span={3}>
+          <ProjectFilter onChange={handleSelectedProjectsChange} />
+        </Grid.Col>
+        <Grid.Col span={9} role="main">
+          {isToday(currentDate) && currentEntry && (
+            <Card withBorder shadow="sm" className="mb-4 bg-blue-50 border-blue-200">
               <Group>
-                <Text size="sm" c="dimmed">{currentEntry.project_name || 'No Project'}</Text>
-                <Text size="sm" c="dimmed">•</Text>
-                <Text size="sm" c="blue" fw={500}>
-                  {runningDuration}
-                </Text>
+                <IconPlayerPlay size={24} className="text-blue-500" />
+                <Stack gap={0}>
+                  <Text fw={600}>{currentEntry.description || <span className="italic">No description</span>}</Text>
+                  <Group>
+                    <Text size="sm" c="dimmed">{currentEntry.project_name || 'No Project'}</Text>
+                    <Text size="sm" c="dimmed">•</Text>
+                    <Text size="sm" c="blue" fw={500}>
+                      {runningDuration}
+                    </Text>
+                  </Group>
+                </Stack>
               </Group>
-            </Stack>
-          </Group>
-        </Card>
-      )}
+            </Card>
+          )}
 
-      {/* Date Navigation Header */}
-      <Card shadow="sm" withBorder className="mb-4">
-        <Group justify="space-between" align="center">
-          <ActionIcon
-            variant="subtle"
-            size="lg"
-            onClick={handlePreviousDay}
-            aria-label="Previous day"
-          >
-            <IconChevronLeft size={20} />
-          </ActionIcon>
+          <Group justify="space-between" align="center" mb="md">
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              onClick={handlePreviousDay}
+              aria-label="Previous day"
+            >
+              <IconChevronLeft size={20} />
+            </ActionIcon>
 
-          <Stack align="center" gap="xs">
-            <Group gap="xs" align="center">
-              <IconCalendar size={18} />
+            <Stack align="center" gap="xs">
               <Title order={3}>
                 {format(currentDate, 'EEEE, MMMM d, yyyy')}
               </Title>
-            </Group>
 
-            {!isToday(currentDate) && (
-              <Button variant="subtle" size="xs" onClick={handleToday}>
-                Go to Today
-              </Button>
-            )}
+              {!isToday(currentDate) && (
+                <Button variant="subtle" size="xs" onClick={handleToday}>
+                  Go to Today
+                </Button>
+              )}
+            </Stack>
 
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              onClick={handleNextDay}
+              aria-label="Next day"
+              disabled={isToday(currentDate)} // Prevent going beyond today
+            >
+              <IconChevronRight size={20} />
+            </ActionIcon>
+          </Group>
+
+          <Group justify="flex-end">
             {entries && entries.length > 0 && (
               <Text size="sm" c="dimmed">
-                Total: {formatDuration(totalSeconds)} ({entries.length} entries)
+                Total: {formatDuration(totalSeconds)} ({filteredEntries.length} entries)
               </Text>
             )}
-          </Stack>
+          </Group>
 
-          <ActionIcon
-            variant="subtle"
-            size="lg"
-            onClick={handleNextDay}
-            aria-label="Next day"
-            disabled={isToday(currentDate)} // Prevent going beyond today
-          >
-            <IconChevronRight size={20} />
-          </ActionIcon>
-        </Group>
-      </Card>
+          {error && (
+            <Alert color="red" title="Error">
+              {error}
+            </Alert>
+          )}
 
-      {/* Error State */}
-      {error && (
-        <Card shadow="sm" withBorder className="mb-4 border-red-200">
-          <Text c="red" size="sm">{error}</Text>
-        </Card>
-      )}
+          {loading && (
+            <Group justify="center" my="xl">
+              <Loader />
+            </Group>
+          )}
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex justify-center py-8">
-          <Loader role="status" />
-        </div>
-      )}
+          {!loading && !error && filteredEntries.length === 0 && (
+            <Text c="dimmed" ta="center" my="xl">
+              No time entries found for this day.
+            </Text>
+          )}
 
-      {/* Empty State */}
-      {!loading && entries && entries.length === 0 && (
-        <Card shadow="sm" withBorder className="text-center py-8">
-          <Text c="dimmed">
-            No time entries found for {format(currentDate, 'MMMM d, yyyy')}
-          </Text>
-        </Card>
-      )}
-
-      {/* Time Entries */}
-      {!loading && entries && entries.length > 0 && (
-        <Stack>
-          {entries.map((entry) => (
-            <Card key={entry.entry_id} shadow="sm" withBorder className="mb-4">
-              <Group justify="space-between" align="flex-start" mb="sm">
-                <div className="flex-1">
-                  <Text fw={600} className="mb-1">{entry.description}</Text>
-                  <Group gap="xs">
-                    <Text size="sm" c="dimmed">{entry.project_name}</Text>
-                    <Text size="sm" c="dimmed">•</Text>
-                    <Text size="sm" c="dimmed">{formatDuration(entry.seconds)}</Text>
-                    <Text size="sm" c="dimmed">•</Text>
-                    <Text size="sm" c="dimmed">
-                      {format(new Date(entry.start), 'h:mm a')}
-                    </Text>
+          {!loading && !error && filteredEntries.length > 0 && (
+            <Stack gap="sm" mt="md">
+              {filteredEntries.map((entry) => (
+                <Card key={entry.entry_id} withBorder>
+                  <Group justify="space-between" align="flex-start" >
+                    <div className="flex-1">
+                      <Text fw={600} className="mb-1">{entry.description || <span style={{ color: 'gray', fontStyle: 'italic' }}>No description</span>}</Text>
+                      <Group gap="xs">
+                        <Text size="sm" c="dimmed">{entry.project_name}</Text>
+                        <Text size="sm" c="dimmed">•</Text>
+                        <Text size="sm" c="dimmed">{formatDuration(entry.seconds)}</Text>
+                        <Text size="sm" c="dimmed">•</Text>
+                        <Text size="sm" c="dimmed">
+                          {format(new Date(entry.start), 'h:mm a')}
+                        </Text>
+                      </Group>
+                    </div>
+                    <Text size="xl" fw={600}>{formatDuration(entry.seconds)}</Text>
                   </Group>
-                </div>
-              </Group>
 
-              {/* Notes Section */}
-              <Stack mt="sm" className="pl-3 border-l-2 border-gray-200">
-                {entry.notes.map((note) => (
-                  <div key={note.id} className="bg-gray-50 p-2 rounded text-sm">
-                    <Text size="sm">{note.note_text}</Text>
-                    <Text size="xs" c="dimmed" mt="xs">
-                      {format(new Date(note.created_at), 'MMM d, h:mm a')}
-                    </Text>
-                  </div>
-                ))}
+                  {entry.notes.length > 0 &&
+                    <Stack mt="sm" className="pl-3 border-l-2 border-gray-200">
+                      {entry.notes.map((note) => (
+                        <div key={note.id} className="bg-gray-50 p-2 rounded text-sm">
+                          <Text size="sm">{note.note_text}</Text>
+                          <Text size="xs" c="dimmed" mt="xs">
+                            {format(new Date(note.created_at), 'MMM d, h:mm a')}
+                          </Text>
+                        </div>
+                      ))}
+                    </Stack>
+                  }
 
-                {/* Add Note Form */}
-                <Group gap="xs" mt="xs">
-                  <TextInput
-                    placeholder="Add a note..."
-                    size="sm"
-                    className="flex-1"
-                    value={drafts[entry.entry_id] ?? ''}
-                    onChange={(ev) =>
-                      setDrafts({ ...drafts, [entry.entry_id]: ev.currentTarget.value })
-                    }
-                    onKeyDown={(ev) => {
-                      if (ev.key === 'Enter' && !ev.shiftKey) {
-                        ev.preventDefault();
-                        handleAddNote(entry.entry_id);
+                  <Group gap="xs" mt="xs">
+                    <TextInput
+                      placeholder="Add a note..."
+                      size="sm"
+                      className="flex-1"
+                      value={drafts[entry.entry_id] ?? ''}
+                      onChange={(ev) =>
+                        setDrafts({ ...drafts, [entry.entry_id]: ev.currentTarget.value })
                       }
-                    }}
-                  />
-                  <Button
-                    size="sm"
-                    variant="light"
-                    onClick={() => handleAddNote(entry.entry_id)}
-                    disabled={!drafts[entry.entry_id]?.trim()}
-                  >
-                    Add
-                  </Button>
-                </Group>
-              </Stack>
-            </Card>
-          ))}
-        </Stack>
-      )}
-    </Stack>
+                      onKeyDown={(ev) => {
+                        if (ev.key === 'Enter' && !ev.shiftKey) {
+                          ev.preventDefault();
+                          handleAddNote(entry.entry_id);
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="light"
+                      onClick={() => handleAddNote(entry.entry_id)}
+                      disabled={!drafts[entry.entry_id]?.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Group>
+                </Card>
+              ))}
+            </Stack>
+          )}
+        </Grid.Col>
+      </Grid>
+    </div>
   );
 }

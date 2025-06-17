@@ -146,6 +146,20 @@ def get_current_entry():
 # -------------------------------------------------
 
 
+@app.get("/projects", response_model=List[str], summary="Get all unique project names")
+def get_projects():
+    """
+    Returns a list of all unique project names from the time_entries table.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = lambda cursor, row: row[0]  # Return just the first column
+        cur = conn.cursor()
+        projects = cur.execute(
+            "SELECT DISTINCT project_name FROM time_entries WHERE project_name IS NOT NULL ORDER BY project_name"
+        ).fetchall()
+        return projects
+
+
 @app.get(
     "/time_entries",
     response_model=List[TimeEntryWithNotes],
