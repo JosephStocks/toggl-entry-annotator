@@ -1,7 +1,34 @@
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { MantineProvider } from '@mantine/core';
+
+// --- Copied types from App.tsx ---
+type Note = { id: number; note_text: string; created_at: string };
+type Entry = {
+    entry_id: number;
+    description: string;
+    project_name: string;
+    seconds: number;
+    start: string;
+    notes: Note[];
+};
+type CurrentEntry = {
+    id: number;
+    description: string;
+    project_name: string;
+    start: string;
+    duration: number; // is negative
+    project_id: number;
+};
+// ------------------------------------
+
+interface MockApiProps {
+    entries?: Entry[];
+    projects?: string[];
+    current?: CurrentEntry | null;
+    ok?: boolean;
+}
 
 // Helper to render App with MantineProvider
 function renderWithProvider() {
@@ -13,7 +40,7 @@ function renderWithProvider() {
 }
 
 // More robust mock that handles all API endpoints used by App
-function mockAllApis({ entries = [], projects = [], current = null, ok = true }) {
+function mockAllApis({ entries = [], projects = [], current = null, ok = true }: MockApiProps) {
     window.fetch = vi.fn((url: string | URL, options?: RequestInit) => {
         const urlString = url.toString();
 
@@ -126,7 +153,7 @@ describe('App', () => {
 });
 
 describe('App with Project Filter', () => {
-    const mockEntries = [
+    const mockEntries: Entry[] = [
         {
             entry_id: 1, description: 'Work on Feature X', project_name: 'Project A',
             seconds: 3600, start: '2025-01-01T10:00:00Z', notes: [],
@@ -138,28 +165,12 @@ describe('App with Project Filter', () => {
     ];
     const mockProjects = ['Project A', 'Project B'];
 
-    // Mock fetch to handle both entries and projects calls
-    function mockApis(entries: any[], projects: string[]) {
-        window.fetch = vi.fn((url: string) => {
-            if (url.includes('/projects')) {
-                return Promise.resolve({ ok: true, json: async () => projects });
-            }
-            if (url.includes('/sync/current')) {
-                return Promise.resolve({ ok: true, status: 204, json: async () => null });
-            }
-            if (url.includes('/time_entries')) {
-                return Promise.resolve({ ok: true, json: async () => entries });
-            }
-            return Promise.resolve({ ok: false, status: 404 });
-        }) as any;
-    }
-
     afterEach(() => {
         vi.restoreAllMocks();
     });
 
     it('filters time entries when a project is deselected', async () => {
-        mockApis(mockEntries, mockProjects);
+        mockAllApis({ entries: mockEntries, projects: mockProjects });
         renderWithProvider();
 
         // Wait for both entries and the filter to be rendered
@@ -181,7 +192,7 @@ describe('App with Project Filter', () => {
     });
 
     it('shows all entries again when a deselected project is re-selected', async () => {
-        mockApis(mockEntries, mockProjects);
+        mockAllApis({ entries: mockEntries, projects: mockProjects });
         renderWithProvider();
 
         const projectACheckbox = await screen.findByLabelText('Project A');
@@ -203,7 +214,7 @@ describe('App with Project Filter', () => {
     });
 
     it('filters correctly with "Deselect All" and "Select All" buttons', async () => {
-        mockApis(mockEntries, mockProjects);
+        mockAllApis({ entries: mockEntries, projects: mockProjects });
         renderWithProvider();
 
         await screen.findByText('Work on Feature X');

@@ -20,7 +20,6 @@ import {
 import {
   IconChevronLeft,
   IconChevronRight,
-  IconCalendar,
   IconPlayerPlay,
   IconInfoCircle,
   IconRefresh,

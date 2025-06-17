@@ -2,7 +2,12 @@ import { getDateWindowUTC, formatTimeRange } from './time';
 import { vi } from 'vitest';
 
 beforeAll(() => {
-    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ timeZone: 'America/Chicago' });
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+        timeZone: 'America/Chicago',
+        locale: 'en-US',
+        calendar: 'gregory',
+        numberingSystem: 'latn',
+    });
 });
 
 afterAll(() => {

@@ -28,11 +28,12 @@ describe('ProjectFilter', () => {
         vi.restoreAllMocks();
     });
 
-    it('renders a loading or initial state correctly', () => {
+    it('renders a loading or initial state correctly', async () => {
         mockProjectsApi([]);
         renderProjectFilter();
-        // Initially it might not show anything or a loader, but it shouldn't crash.
-        // We will test for the final state in other tests.
+        // The component will fetch and settle on an empty state.
+        // Waiting for the final message ensures all state updates are complete.
+        await screen.findByText(/No projects found to filter/i);
         expect(screen.getByText('Filter by Project')).toBeInTheDocument();
     });
 
