@@ -15,6 +15,7 @@ The main motivation is to have a private, enhanced view of your Toggl data, allo
 - **Frontend**:
     - Built with [React](https://reactjs.org/), [Vite](https://vitejs.dev/), and [TypeScript](https://www.typescriptlang.org/).
     - UI components from the [Mantine](https://mantine.dev/) library.
+    - Uses [TanStack React Query](https://tanstack.com/query/latest) for data fetching, caching, and optimistic UI updates.
     - Daily view of time entries with navigation.
     - Add and delete notes on individual time entries.
     - Filter entries by project.

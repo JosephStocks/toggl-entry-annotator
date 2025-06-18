@@ -26,75 +26,20 @@ import {
   IconClock,
 } from '@tabler/icons-react';
 import { format, addDays, subDays } from 'date-fns';
-import { getDateWindowUTC } from './utils/time.ts';
 import { ProjectFilter } from './ProjectFilter.tsx';
-
-// --- Types mirroring your API ------------------------------------
-type Note = { id: number; note_text: string; created_at: string };
-type Entry = {
-  entry_id: number;
-  description: string;
-  project_name: string;
-  seconds: number;
-  start: string;
-  notes: Note[];
-};
-// Toggl API v9 returns a slightly different shape for the current entry
-type CurrentEntry = {
-  id: number;
-  description: string;
-  project_name: string;
-  start: string;
-  duration: number; // is negative
-  project_id: number;
-};
-
-type SyncResult = {
-  ok: boolean;
-  records_synced: number;
-  message: string;
-};
-
-// --- API Helpers ----------------------------------------
-const API_BASE = '/api';
-
-async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${url}`, options);
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `HTTP ${response.status} ${response.statusText}: ${errorBody}`
-    );
-  }
-  // Handle cases where response might be empty (e.g., 204 No Content for current entry)
-  if (response.status === 204) {
-    return null as T;
-  }
-  return response.json();
-}
-
-// --- Component-specific fetchers -------------------------
-const fetchEntriesForDate = (date: Date) => {
-  const { startIso, endIso } = getDateWindowUTC(date, 4);
-  return fetchApi<Entry[]>(
-    `/time_entries?start_iso=${encodeURIComponent(
-      startIso
-    )}&end_iso=${encodeURIComponent(endIso)}`
-  );
-};
-
-const addNote = (entryId: number, text: string) =>
-  fetchApi('/notes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ entry_id: entryId, note_text: text }),
-  });
-
-const fetchCurrentEntry = () => fetchApi<CurrentEntry | null>('/sync/current');
-
-const runSync = (type: 'full' | 'recent') =>
-  fetchApi<SyncResult>(`/sync/${type}`, { method: 'POST' });
-
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
+import {
+  type Note,
+  type Entry,
+  fetchEntriesForDate,
+  addNote,
+  fetchCurrentEntry,
+  runSync,
+} from './api.ts';
 
 // --- UI Components ----------------------------------------
 
@@ -197,38 +142,96 @@ function isToday(date: Date): boolean {
 // -----------------------------------------------------------------
 
 export default function App() {
+  const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [entries, setEntries] = useState<Entry[] | null>(null);
-  const [currentEntry, setCurrentEntry] = useState<CurrentEntry | null>(null);
-  const [runningDuration, setRunningDuration] = useState('');
   const [drafts, setDrafts] = useState<Record<number, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(
+    new Set()
+  );
+  const [runningDuration, setRunningDuration] = useState('');
 
-  const loadEntries = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [daily, current] = await Promise.all([
-        fetchEntriesForDate(currentDate),
-        fetchCurrentEntry(),
+  // --- Queries -------------------------------------------------
+  const entriesQuery = useQuery({
+    queryKey: ['entries', currentDate.toISOString().split('T')[0]],
+    queryFn: () => fetchEntriesForDate(currentDate),
+  });
+
+  const currentEntryQuery = useQuery({
+    queryKey: ['currentEntry'],
+    queryFn: fetchCurrentEntry,
+    // Refetch current entry more frequently if you want it to be near real-time
+    // refetchInterval: 30000,
+  });
+
+  // --- Mutations -----------------------------------------------
+  const addNoteMutation = useMutation({
+    mutationFn: (variables: { entryId: number; text: string }) =>
+      addNote(variables.entryId, variables.text),
+    // Optimistic update logic
+    onMutate: async (newNote: { entryId: number; text: string }) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({
+        queryKey: ['entries', currentDate.toISOString().split('T')[0]],
+      });
+
+      // Snapshot the previous value
+      const previousEntries = queryClient.getQueryData<Entry[]>([
+        'entries',
+        currentDate.toISOString().split('T')[0],
       ]);
-      setEntries(daily);
-      setCurrentEntry(current);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load entries');
-      setEntries([]);
-      setCurrentEntry(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentDate]);
 
-  // Useeffect for initial load and date changes
-  useEffect(() => {
-    loadEntries();
-  }, [loadEntries]);
+      // Optimistically update to the new value
+      if (previousEntries) {
+        const newEntries = previousEntries.map((entry) => {
+          if (entry.entry_id === newNote.entryId) {
+            // Create a temporary note object. The server will return the real one.
+            const tempNote: Note = {
+              id: Date.now(), // temporary ID
+              note_text: newNote.text,
+              created_at: new Date().toISOString(),
+            };
+            return {
+              ...entry,
+              notes: [...entry.notes, tempNote],
+            };
+          }
+          return entry;
+        });
+        queryClient.setQueryData(
+          ['entries', currentDate.toISOString().split('T')[0]],
+          newEntries
+        );
+      }
+
+      // Return a context object with the snapshotted value
+      return { previousEntries };
+    },
+    // If the mutation fails, use the context returned from onMutate to roll back
+    onError: (_err, _newNote, context) => {
+      if (context?.previousEntries) {
+        queryClient.setQueryData(
+          ['entries', currentDate.toISOString().split('T')[0]],
+          context.previousEntries
+        );
+      }
+      // You could also show a toast notification here
+    },
+    // Always refetch after error or success to ensure data is consistent
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['entries', currentDate.toISOString().split('T')[0]],
+      });
+      // also invalidate current entry if notes affect it
+      queryClient.invalidateQueries({ queryKey: ['currentEntry'] });
+    },
+  });
+
+  const {
+    data: entries,
+    isLoading: loading,
+    error,
+  } = entriesQuery;
+  const { data: currentEntry } = currentEntryQuery;
 
   // Useeffect for running timer
   useEffect(() => {
@@ -264,25 +267,19 @@ export default function App() {
     setSelectedProjects(projects);
   }, []);
 
-  const handleAddNote = async (entryId: number) => {
+  const handleAddNote = (entryId: number) => {
     if (!drafts[entryId]?.trim()) return;
-
-    try {
-      await addNote(entryId, drafts[entryId]?.trim());
-      setDrafts({ ...drafts, [entryId]: '' });
-      // Refetch after adding
-      loadEntries();
-    } catch (err) {
-      setError('Failed to add note');
-    }
+    addNoteMutation.mutate({ entryId, text: drafts[entryId]!.trim() });
+    setDrafts({ ...drafts, [entryId]: '' });
   };
 
-  const filteredEntries = entries?.filter(entry => selectedProjects.has(entry.project_name)) ?? [];
+  const filteredEntries =
+    entries?.filter((entry) => selectedProjects.has(entry.project_name)) ?? [];
   const totalSeconds = filteredEntries.reduce((acc, e) => acc + e.seconds, 0);
 
   return (
     <div style={{ padding: '2rem' }}>
-      <SyncPanel onSyncComplete={loadEntries} />
+      <SyncPanel onSyncComplete={() => queryClient.invalidateQueries({ queryKey: ['entries'] })} />
 
       <Grid>
         <Grid.Col span={3}>
@@ -350,7 +347,7 @@ export default function App() {
 
           {error && (
             <Alert color="red" title="Error">
-              {error}
+              {error.message}
             </Alert>
           )}
 
@@ -419,9 +416,15 @@ export default function App() {
                       size="sm"
                       variant="light"
                       onClick={() => handleAddNote(entry.entry_id)}
-                      disabled={!drafts[entry.entry_id]?.trim()}
+                      disabled={
+                        !drafts[entry.entry_id]?.trim() ||
+                        addNoteMutation.isPending
+                      }
                     >
-                      Add
+                      {addNoteMutation.isPending &&
+                        addNoteMutation.variables?.entryId === entry.entry_id
+                        ? 'Adding...'
+                        : 'Add'}
                     </Button>
                   </Group>
                 </Card>

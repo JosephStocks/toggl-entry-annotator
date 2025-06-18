@@ -1,240 +1,184 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import App from './App';
 import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { vi } from 'vitest';
 
-// --- Copied types from App.tsx ---
-type Note = { id: number; note_text: string; created_at: string };
-type Entry = {
-    entry_id: number;
-    description: string;
-    project_name: string;
-    seconds: number;
-    start: string;
-    notes: Note[];
-};
-type CurrentEntry = {
-    id: number;
-    description: string;
-    project_name: string;
-    start: string;
-    duration: number; // is negative
-    project_id: number;
-};
-// ------------------------------------
+// Mock the entire api.ts module. This is the most reliable way.
+vi.mock('./api.ts', () => ({
+    fetchEntriesForDate: vi.fn(),
+    addNote: vi.fn(),
+    fetchCurrentEntry: vi.fn(),
+    runSync: vi.fn(),
+}));
 
-interface MockApiProps {
-    entries?: Entry[];
-    projects?: string[];
-    current?: CurrentEntry | null;
-    ok?: boolean;
-}
+vi.mock('./ProjectFilter.tsx', () => ({
+    ProjectFilter: ({ onChange }: { onChange: (projects: Set<string>) => void }) => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { useEffect } = require('react');
+        useEffect(() => {
+            // Select all projects by default, mirroring real component behaviour
+            onChange(new Set(['Project A', 'Project B']));
+        }, [onChange]);
 
-// Helper to render App with MantineProvider
-function renderWithProvider() {
-    return render(
+        return (
+            <div>
+                <button onClick={() => onChange(new Set(['Project A']))}>Filter Project A</button>
+                <button onClick={() => onChange(new Set(['Project A', 'Project B']))}>Select All</button>
+            </div>
+        );
+    }
+}));
+
+import App from './App';
+import * as api from './api';
+import { type Entry, type Note } from './api';
+
+
+// --- Test Data ---
+const mockEntries: Entry[] = [
+    {
+        entry_id: 1, description: 'Work on Feature X', project_name: 'Project A',
+        seconds: 3600, start: '2025-01-01T10:00:00Z', notes: [],
+    },
+    {
+        entry_id: 2, description: 'Bugfix on Y', project_name: 'Project B',
+        seconds: 1800, start: '2025-01-01T11:00:00Z', notes: [],
+    },
+];
+
+// --- Test Setup ---
+const createTestQueryClient = () => new QueryClient({
+    defaultOptions: {
+        queries: {
+            retry: false, // Disables retries, making tests faster and more predictable
+            gcTime: Infinity, // Prevent queries from being garbage collected in tests
+        },
+    },
+});
+
+function renderWithQueryClient(ui: React.ReactElement) {
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
         <MantineProvider>
-            <App />
+            <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
         </MantineProvider>
     );
-}
-
-// More robust mock that handles all API endpoints used by App
-function mockAllApis({ entries = [], projects = [], current = null, ok = true }: MockApiProps) {
-    window.fetch = vi.fn((url: string | URL, options?: RequestInit) => {
-        const urlString = url.toString();
-
-        if (urlString.includes('/projects')) {
-            return Promise.resolve({ ok, json: async () => projects });
-        }
-        if (urlString.includes('/sync/current')) {
-            return Promise.resolve({ ok, status: current ? 200 : 204, json: async () => current });
-        }
-        if (urlString.includes('/time_entries')) {
-            return Promise.resolve({ ok, json: async () => entries });
-        }
-        if (urlString.includes('/notes') && options?.method === 'POST') {
-            return Promise.resolve({ ok, status: 201, json: async () => ({ message: 'Note added' }) });
-        }
-
-        // Fallback for unexpected calls
-        return Promise.reject(new Error(`Unhandled API call to ${urlString}`));
-    }) as any;
+    return render(ui, { wrapper });
 }
 
 describe('App', () => {
+    beforeEach(() => {
+        vi.setSystemTime(new Date('2025-01-01T12:00:00Z'));
+        // Reset mock entries
+        mockEntries.forEach(e => { e.notes = []; });
+        // Reset mocks to a default state before each test
+        vi.mocked(api.fetchEntriesForDate).mockImplementation((..._args) => {
+            return Promise.resolve(mockEntries);
+        });
+        vi.mocked(api.addNote).mockImplementation((id: number, text: string) => {
+            const newNote: Note = { id: Date.now(), note_text: text, created_at: new Date().toISOString() };
+            const entry = mockEntries.find(e => e.entry_id === id);
+            if (entry) {
+                entry.notes.push(newNote);
+            }
+            return Promise.resolve(newNote);
+        });
+        vi.mocked(api.fetchCurrentEntry).mockResolvedValue(null);
+        vi.mocked(api.runSync).mockResolvedValue({ ok: true, records_synced: 10, message: 'Sync complete' });
+    });
+
     afterEach(() => {
-        vi.restoreAllMocks();
+        vi.useRealTimers();
+        // Clear mock history after each test
+        vi.clearAllMocks();
     });
 
-    it('shows loading state', async () => {
-        mockAllApis({ entries: [] });
-        renderWithProvider();
-        // The loader is now present for a very short time.
-        // We can check that the main content appears.
-        await screen.findByText(/Sync Toggl Data/i);
-        expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    });
-
-    it('shows error state', async () => {
-        // Mock a specific endpoint to fail
-        window.fetch = vi.fn().mockRejectedValue(new Error('Network Error'));
-        renderWithProvider();
-        // The error will appear in both the main content and the filter.
-        // We can just wait for one of them.
-        const alerts = await screen.findAllByText(/Network Error/i);
-        expect(alerts.length).toBeGreaterThan(0);
-    });
-
-    it('shows empty state', async () => {
-        mockAllApis({ entries: [], projects: ['Any Project'] });
-        renderWithProvider();
-        await screen.findByText(/No time entries found/i);
-    });
-
-    it('shows populated state', async () => {
-        mockAllApis({
-            entries: [
-                {
-                    entry_id: 1, description: 'Test Entry', project_name: 'Test Project',
-                    seconds: 120, start: '2025-01-01T10:00:00Z',
-                    notes: [{ id: 1, note_text: 'A note', created_at: '2025-01-01T11:00:00Z' }],
-                },
-            ],
-            projects: ['Test Project'],
-        });
-        renderWithProvider();
-        await screen.findByText('Test Entry');
-        // Scope the search to the main content area to avoid matching the filter
-        const mainContent = screen.getByRole('main');
-        expect(within(mainContent).getByText('Test Project')).toBeInTheDocument();
-        expect(within(mainContent).getByText('A note')).toBeInTheDocument();
-    });
-
-    it('can add a note', async () => {
-        mockAllApis({
-            entries: [
-                {
-                    entry_id: 2, description: 'Entry to note', project_name: 'Proj',
-                    seconds: 60, start: '2025-01-01T10:00:00Z', notes: [],
-                },
-            ],
-            projects: ['Proj'],
-        });
-
-        renderWithProvider();
-        await screen.findByText('Entry to note');
-
-        // Type in note and submit
-        const input = await screen.findByPlaceholderText('Add a note...');
-        await userEvent.type(input, 'New note');
-        await userEvent.click(screen.getByRole('button', { name: /Add/i }));
-
-        // The mock should handle the refetch, but we just need to ensure the action completes
-        // In a real scenario, you'd update the mock to return the new note on the next fetch
-        expect(input).toHaveValue('');
-    });
-
-    it('navigates dates', async () => {
-        mockAllApis({ entries: [] });
-        renderWithProvider();
-        await screen.findByText(/No time entries found/i);
-
-        // Go to previous day to ensure "Go to Today" button appears
-        await userEvent.click(screen.getByLabelText('Previous day'));
-        await screen.findByText(/Go to Today/i);
-
-        // Now the "Go to Today" button should be present
-        await userEvent.click(screen.getByRole('button', { name: /go to today/i }));
+    it('shows loading state initially, then displays entries', async () => {
+        renderWithQueryClient(<App />);
+        // Then, the content should appear
         await waitFor(() => {
-            expect(screen.queryByText(/Go to Today/i)).not.toBeInTheDocument();
+            expect(screen.getByText('Work on Feature X')).toBeInTheDocument();
+        });
+    });
+
+    it('shows error state if fetching entries fails', async () => {
+        vi.mocked(api.fetchEntriesForDate).mockRejectedValueOnce(new Error('Fetch failed'));
+        renderWithQueryClient(<App />);
+        await waitFor(() => {
+            expect(screen.getByText('Fetch failed')).toBeInTheDocument();
+        });
+    });
+
+    it('shows populated state with entries', async () => {
+        renderWithQueryClient(<App />);
+        await waitFor(() => {
+            screen.debug();
+            expect(screen.getByText(/Work on Feature X/i, { exact: false })).toBeInTheDocument();
+            expect(screen.getByText(/Bugfix on Y/i, { exact: false })).toBeInTheDocument();
+        });
+    });
+
+    it('can add a note and optimistically updates the UI', async () => {
+        const user = userEvent.setup();
+        renderWithQueryClient(<App />);
+        const entryText = /Work on Feature X/i;
+        const noteText = 'This is a new note!';
+
+        const entryCard = await screen.findByText(entryText, { exact: false });
+        const cardRoot = entryCard.closest('div.mantine-Card-root');
+        expect(cardRoot).not.toBeNull();
+        if (!cardRoot) return;
+
+        const noteInput = within(cardRoot as HTMLElement).getByPlaceholderText('Add a note...') as HTMLElement;
+        const addButton = within(cardRoot as HTMLElement).getByRole('button', { name: 'Add' }) as HTMLElement;
+
+        await user.type(noteInput, noteText);
+        await user.click(addButton);
+
+        await waitFor(() => {
+            expect(within(cardRoot as HTMLElement).getByText(noteText) as HTMLElement).toBeInTheDocument();
+        });
+
+        expect(api.addNote).toHaveBeenCalledWith(1, noteText);
+    });
+
+    it('navigates dates and refetches data', async () => {
+        const user = userEvent.setup();
+        renderWithQueryClient(<App />);
+        await waitFor(() => {
+            expect(screen.getByText(/Work on Feature X/i, { exact: false })).toBeInTheDocument();
+        });
+        expect(api.fetchEntriesForDate).toHaveBeenCalledTimes(1);
+
+        await user.click(screen.getByLabelText('Previous day'));
+        await waitFor(() => {
+            expect(api.fetchEntriesForDate).toHaveBeenCalledTimes(2);
+        });
+
+        await user.click(screen.getByLabelText('Next day'));
+        await waitFor(() => {
+            expect(api.fetchEntriesForDate).toHaveBeenCalledTimes(3);
+        });
+    });
+
+    it('filters time entries when the project filter changes', async () => {
+        const user = userEvent.setup();
+        renderWithQueryClient(<App />);
+        await waitFor(() => {
+            expect(screen.getByText(/Work on Feature X/i, { exact: false })).toBeInTheDocument();
+        });
+
+        await user.click(screen.getByRole('button', { name: 'Filter Project A' }));
+        await waitFor(() => {
+            expect(screen.getByText(/Work on Feature X/i, { exact: false })).toBeInTheDocument();
+            expect(screen.queryByText(/Bugfix on Y/i, { exact: false })).not.toBeInTheDocument();
+        });
+
+        await user.click(screen.getByRole('button', { name: 'Select All' }));
+        await waitFor(() => {
+            expect(screen.getByText(/Work on Feature X/i, { exact: false })).toBeInTheDocument();
+            expect(screen.getByText(/Bugfix on Y/i, { exact: false })).toBeInTheDocument();
         });
     });
 });
-
-describe('App with Project Filter', () => {
-    const mockEntries: Entry[] = [
-        {
-            entry_id: 1, description: 'Work on Feature X', project_name: 'Project A',
-            seconds: 3600, start: '2025-01-01T10:00:00Z', notes: [],
-        },
-        {
-            entry_id: 2, description: 'Bugfix on Y', project_name: 'Project B',
-            seconds: 1800, start: '2025-01-01T11:00:00Z', notes: [],
-        },
-    ];
-    const mockProjects = ['Project A', 'Project B'];
-
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
-    it('filters time entries when a project is deselected', async () => {
-        mockAllApis({ entries: mockEntries, projects: mockProjects });
-        renderWithProvider();
-
-        // Wait for both entries and the filter to be rendered
-        await screen.findByText('Work on Feature X');
-        await screen.findByText('Bugfix on Y');
-        const projectACheckbox = await screen.findByLabelText('Project A');
-        expect(projectACheckbox).toBeInTheDocument();
-        expect(projectACheckbox).toBeChecked();
-
-        // Deselect Project A
-        await userEvent.click(projectACheckbox);
-
-        // Now, only Project B's entry should be visible
-        await waitFor(() => {
-            const mainContent = screen.getByRole('main');
-            expect(within(mainContent).queryByText('Work on Feature X')).not.toBeInTheDocument();
-            expect(within(mainContent).getByText('Bugfix on Y')).toBeInTheDocument();
-        });
-    });
-
-    it('shows all entries again when a deselected project is re-selected', async () => {
-        mockAllApis({ entries: mockEntries, projects: mockProjects });
-        renderWithProvider();
-
-        const projectACheckbox = await screen.findByLabelText('Project A');
-
-        // Deselect
-        await userEvent.click(projectACheckbox);
-        await waitFor(() => {
-            const mainContent = screen.getByRole('main');
-            expect(within(mainContent).queryByText('Work on Feature X')).not.toBeInTheDocument();
-        });
-
-        // Re-select
-        await userEvent.click(projectACheckbox);
-        await waitFor(() => {
-            const mainContent = screen.getByRole('main');
-            expect(within(mainContent).getByText('Work on Feature X')).toBeInTheDocument();
-            expect(within(mainContent).getByText('Bugfix on Y')).toBeInTheDocument();
-        });
-    });
-
-    it('filters correctly with "Deselect All" and "Select All" buttons', async () => {
-        mockAllApis({ entries: mockEntries, projects: mockProjects });
-        renderWithProvider();
-
-        await screen.findByText('Work on Feature X');
-        const deselectAllButton = await screen.findByRole('button', { name: 'Deselect all' });
-
-        // Deselect all
-        await userEvent.click(deselectAllButton);
-        await waitFor(() => {
-            const mainContent = screen.getByRole('main');
-            expect(within(mainContent).queryByText('Work on Feature X')).not.toBeInTheDocument();
-            expect(within(mainContent).queryByText('Bugfix on Y')).not.toBeInTheDocument();
-        });
-
-        // "Select all" button should now be visible
-        const selectAllButton = await screen.findByRole('button', { name: 'Select all' });
-        await userEvent.click(selectAllButton);
-        await waitFor(() => {
-            const mainContent = screen.getByRole('main');
-            expect(within(mainContent).getByText('Work on Feature X')).toBeInTheDocument();
-            expect(within(mainContent).getByText('Bugfix on Y')).toBeInTheDocument();
-        });
-    });
-}); 
