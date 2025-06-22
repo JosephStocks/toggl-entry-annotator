@@ -333,27 +333,22 @@ def get_time_entries(
 
 @app.post("/notes", status_code=201)
 def create_note(note: NoteCreate) -> dict[str, str]:
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO entry_notes (entry_id, note_text) VALUES (?, ?)",
-        (note.entry_id, note.note_text),
-    )
-    conn.commit()
-    conn.close()
+    """Adds a note to a time entry."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO entry_notes (entry_id, note_text) VALUES (?, ?)",
+            (note.entry_id, note.note_text),
+        )
     return {"message": "Note added"}
 
 
 @app.delete("/notes/{note_id}")
 def delete_note(note_id: int) -> dict[str, str]:
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("DELETE FROM entry_notes WHERE id = ?", (note_id,))
-    if cur.rowcount == 0:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Note not found")
-    conn.commit()
-    conn.close()
+    """Deletes a note by its ID."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute("DELETE FROM entry_notes WHERE id = ?", (note_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Note not found")
     return {"message": "Note deleted"}
 
 
