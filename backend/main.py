@@ -13,7 +13,7 @@ import toggl
 # -------------------------------------------------
 # Config
 # -------------------------------------------------
-DB_PATH = "data/time_tracking.sqlite"
+DB_PATH = os.environ.get("DB_PATH", "data/time_tracking.sqlite")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +26,63 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def init_database():
+    """Initializes the database and creates tables if they don't exist."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.cursor()
+        # Check if time_entries table exists
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='time_entries'"
+        )
+        if cur.fetchone() is None:
+            logger.info("Creating 'time_entries' table.")
+            cur.execute(
+                """
+                CREATE TABLE time_entries (
+                    entry_id INTEGER PRIMARY KEY,
+                    description TEXT,
+                    project_id INTEGER,
+                    project_name TEXT,
+                    seconds INTEGER,
+                    start TEXT,
+                    stop TEXT,
+                    at TEXT,
+                    start_ts INTEGER,
+                    stop_ts INTEGER,
+                    at_ts INTEGER,
+                    tag_ids TEXT,
+                    tag_names TEXT
+                )
+                """
+            )
+        # Check if entry_notes table exists
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='entry_notes'"
+        )
+        if cur.fetchone() is None:
+            logger.info("Creating 'entry_notes' table.")
+            cur.execute(
+                """
+                CREATE TABLE entry_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entry_id INTEGER,
+                    note_text TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (entry_id) REFERENCES time_entries(entry_id)
+                )
+                """
+            )
+        conn.commit()
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Run database initialization on startup."""
+    logger.info("Running startup tasks...")
+    init_database()
+    logger.info("Startup tasks complete.")
 
 
 # -------------------------------------------------

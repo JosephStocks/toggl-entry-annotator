@@ -15,7 +15,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DB_PATH = "data/time_tracking.sqlite"
+DB_PATH = os.environ.get("DB_PATH", "data/time_tracking.sqlite")
 TOGGL_TOKEN = os.environ.get("TOGGL_TOKEN")
 WORKSPACE_ID = os.environ.get("WORKSPACE_ID")
 
