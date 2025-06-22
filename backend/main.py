@@ -15,13 +15,19 @@ import toggl
 # -------------------------------------------------
 DB_PATH = os.environ.get("DB_PATH", "data/time_tracking.sqlite")
 
+# Read CORS origins from environment variable
+# The env var should be a comma-separated string of URLs
+# e.g., "http://localhost:5173,https://your-frontend-domain.netlify.app"
+origins_str = os.environ.get("CORS_ORIGINS", "http://localhost:5173")
+allowed_origins = [origin.strip() for origin in origins_str.split(",")]
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,18 +38,6 @@ def init_database():
     """Initializes the database and creates tables if they don't exist."""
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
-
-        # 1. Run an integrity check to detect corruption
-        logger.info("Running database integrity check...")
-        try:
-            check_result = cur.execute("PRAGMA integrity_check;").fetchone()
-            logger.info(f"Integrity check result: {check_result}")
-            if check_result != ("ok",):
-                logger.error("DATABASE IS CORRUPT. Please re-upload or re-create it.")
-        except sqlite3.Error as e:
-            logger.error(f"An error occurred during integrity check: {e}")
-
-        # 2. Check if tables exist and create them if they don't
         # Check if time_entries table exists
         cur.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='time_entries'"
