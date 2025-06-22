@@ -325,7 +325,6 @@ def get_time_entries(
         item["notes"] = item_notes
         results.append(item)
 
-    conn.close()
     return results
 
 
