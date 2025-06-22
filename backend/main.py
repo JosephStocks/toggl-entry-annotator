@@ -1,19 +1,19 @@
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime, date, timedelta
-import sqlite3
 import json
 import logging
 import os
+import sqlite3
+from datetime import date, datetime, timedelta
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 import toggl
 
 # -------------------------------------------------
 # Config
 # -------------------------------------------------
-DB_PATH = "time_tracking.sqlite"  # keep one truth‑source name
+DB_PATH = "time_tracking.sqlite"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,14 +44,14 @@ class TimeEntryWithNotes(BaseModel):
     project_name: str
     seconds: int
     start: str  # ISO‑8601 Z
-    stop: Optional[str]
+    stop: str | None
     start_ts: int  # epoch UTC
-    stop_ts: Optional[int]
+    stop_ts: int | None
     tag_ids: str
     tag_names: str
     at: str
     at_ts: int
-    notes: List[Note] = []
+    notes: list[Note] = []
 
 
 class NoteCreate(BaseModel):
@@ -131,9 +131,7 @@ def sync_full():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post(
-    "/sync/recent", response_model=SyncResult, summary="Run a sync for recent entries"
-)
+@app.post("/sync/recent", response_model=SyncResult, summary="Run a sync for recent entries")
 def sync_recent():
     """
     Fetches time entries from the last 2 days to capture recent changes and
@@ -175,7 +173,7 @@ def get_current_entry():
 # -------------------------------------------------
 
 
-@app.get("/projects", response_model=List[str], summary="Get all unique project names")
+@app.get("/projects", response_model=list[str], summary="Get all unique project names")
 def get_projects():
     """
     Returns a list of all unique project names from the time_entries table.
@@ -191,7 +189,7 @@ def get_projects():
 
 @app.get(
     "/time_entries",
-    response_model=List[TimeEntryWithNotes],
+    response_model=list[TimeEntryWithNotes],
     summary="Get time entries within a UTC datetime window",
     description="""
 Returns all time entries whose `start_ts` falls within the given UTC time window.
@@ -234,7 +232,7 @@ def get_time_entries(
     end_iso: datetime = Query(
         ..., description="Exclusive ISO 8601 UTC datetime (e.g. 2025-06-13T04:00:00Z)"
     ),
-) -> List[TimeEntryWithNotes]:
+) -> list[TimeEntryWithNotes]:
     if start_iso >= end_iso:
         raise HTTPException(400, "start_iso must be < end_iso")
 

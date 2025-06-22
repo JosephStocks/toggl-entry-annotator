@@ -1,7 +1,7 @@
-import httpx
 import os
-from typing import Dict, List, Any, Optional
+from typing import Any
 
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,10 +10,10 @@ TOGGL_TOKEN = os.environ.get("TOGGL_TOKEN")
 WORKSPACE_ID = os.environ.get("WORKSPACE_ID")
 
 # Simple in-memory cache for projects
-_project_cache: Optional[Dict[int, str]] = None
+_project_cache: dict[int, str] | None = None
 
 
-def _fetch_all_projects() -> Dict[int, str]:
+def _fetch_all_projects() -> dict[int, str]:
     """
     Fetches all projects for the workspace and returns a mapping of
     project_id -> project_name.
@@ -24,15 +24,15 @@ def _fetch_all_projects() -> Dict[int, str]:
     # v9/me?with_related_data=true is the most efficient way to get all projects
     url = "https://api.track.toggl.com/api/v9/me?with_related_data=true"
     auth = (TOGGL_TOKEN, "api_token")
-    
+
     with httpx.Client(auth=auth, timeout=10) as client:
         resp = client.get(url)
         resp.raise_for_status()
         data = resp.json()
 
     # The projects are in the 'projects' key of the response
-    projects: List[Dict[str, Any]] = data.get("projects", [])
-    
+    projects: list[dict[str, Any]] = data.get("projects", [])
+
     # Create a simple {id: name} mapping
     return {p["id"]: p["name"] for p in projects if "id" in p and "name" in p}
 
@@ -45,4 +45,4 @@ def get_project_name(project_id: int) -> str:
     if _project_cache is None:
         _project_cache = _fetch_all_projects()
 
-    return _project_cache.get(project_id, "Unknown Project") 
+    return _project_cache.get(project_id, "Unknown Project")

@@ -1,10 +1,12 @@
+import os
+import sqlite3
+from datetime import UTC, date, datetime
+from unittest.mock import call, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from main import app, _epoch_from_dt
-from datetime import datetime, timezone, date, timedelta
-import sqlite3
-import os
-from unittest.mock import patch, call
+
+from main import _epoch_from_dt, app
 
 client = TestClient(app)
 
@@ -107,7 +109,7 @@ def test_create_note_missing_fields():
     assert resp.status_code == 422
 
 def test_epoch_from_dt_correct():
-    aware = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    aware = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
     assert _epoch_from_dt(aware) == int(aware.timestamp())
 
 def test_epoch_from_dt_naive():
@@ -201,4 +203,4 @@ def test_sync_full_endpoint_chunks_requests(mock_date, mock_sync_time_entries):
         call(date(2025, 1, 14), date(2025, 6, 17)),
     ]
     mock_sync_time_entries.assert_has_calls(expected_calls)
-    assert mock_sync_time_entries.call_count == len(expected_calls) 
+    assert mock_sync_time_entries.call_count == len(expected_calls)

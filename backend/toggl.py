@@ -1,11 +1,11 @@
-import sqlite3
 import json
-import httpx
-import os
-from datetime import datetime, timezone, timedelta, date
-from typing import Optional, Tuple, Dict, Any
 import logging
+import os
+import sqlite3
+from datetime import UTC, date, datetime
+from typing import Any
 
+import httpx
 from dotenv import load_dotenv
 
 import cache
@@ -23,12 +23,12 @@ WORKSPACE_ID = os.environ.get("WORKSPACE_ID")
 def _to_utc_iso_and_ts(iso_str: str) -> tuple[str, int]:
     """Return (ISO-8601-UTC, epoch-seconds) from any Toggl ISO string."""
     dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-    dt_utc = dt.astimezone(timezone.utc)
+    dt_utc = dt.astimezone(UTC)
     iso_utc = dt_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return iso_utc, int(dt_utc.timestamp())
 
 
-def _upsert_sqlite(entry: Dict[str, Any]):
+def _upsert_sqlite(entry: dict[str, Any]):
     """Insert or update a time entry in the SQLite database."""
     with sqlite3.connect(DB_PATH) as db:
         db.execute(
@@ -151,7 +151,7 @@ def sync_time_entries(start_date: date, end_date: date) -> int:
     return records_synced
 
 
-def get_current_running_entry() -> Optional[Dict[str, Any]]:
+def get_current_running_entry() -> dict[str, Any] | None:
     """
     Fetches the currently running time entry from Toggl API v9.
     """
@@ -160,7 +160,7 @@ def get_current_running_entry() -> Optional[Dict[str, Any]]:
 
     url = "https://api.track.toggl.com/api/v9/me/time_entries/current"
     auth = (TOGGL_TOKEN, "api_token")
-    
+
     with httpx.Client(auth=auth, timeout=10) as client:
         resp = client.get(url)
         resp.raise_for_status()
@@ -175,5 +175,5 @@ def get_current_running_entry() -> Optional[Dict[str, Any]]:
             entry["project_name"] = cache.get_project_name(entry["project_id"])
         else:
             entry["project_name"] = "No Project"
-            
+
         return entry
