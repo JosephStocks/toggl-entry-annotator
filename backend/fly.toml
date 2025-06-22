@@ -1,0 +1,23 @@
+# fly.toml app configuration file generated for togglnotes-api on 2025-06-21T21:32:26-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'togglnotes-api'
+primary_region = 'dfw'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[[mounts]]
+  source = 'data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  auto_start_machines = true
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

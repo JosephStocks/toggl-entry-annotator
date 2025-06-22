@@ -1,0 +1,10 @@
+[build]
+base = "frontend"
+command = "pnpm run build"
+publish = "dist"
+
+[[redirects]]
+from = "/api/*"
+to = "https://api.togglnotes.josephpstocks.com/:splat"
+status = 200
+force = true

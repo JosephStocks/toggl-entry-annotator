@@ -13,7 +13,7 @@ import toggl
 # -------------------------------------------------
 # Config
 # -------------------------------------------------
-DB_PATH = "time_tracking.sqlite"
+DB_PATH = "data/time_tracking.sqlite"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

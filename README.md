@@ -91,7 +91,7 @@ The backend server is responsible for syncing data from Toggl and providing it t
 4.  **Initialize the Database:**
     The database schema must be created before running the app. The easiest way is to run the first cell of the `full-sync.ipynb` notebook.
     - Open `backend/full-sync.ipynb` in a Jupyter environment (like VS Code's notebook editor).
-    - Run the first cell to create the `time_entries` and `entry_notes` tables in `time_tracking.sqlite`.
+    - Run the first cell to create the `time_entries` and `entry_notes` tables in `data/time_tracking.sqlite`.
 
 5.  **Perform Initial Data Sync:**
     You can run the rest of the `full-sync.ipynb` notebook to populate your database with all your Toggl history. Alternatively, once the server is running, you can use the "Run Full Sync" button in the web UI.
