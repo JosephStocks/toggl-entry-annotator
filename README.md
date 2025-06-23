@@ -10,7 +10,6 @@ The main motivation is to have a private, enhanced view of your Toggl data, allo
     - Built with [FastAPI](https://fastapi.tiangolo.com/).
     - Syncs Toggl time entries into a local [SQLite](https://www.sqlite.org/index.html) database.
     - Provides a REST API for the frontend to consume.
-    - Uses `polars` and `connectorx` for efficient data handling.
 
 - **Frontend**:
     - Built with [React](https://reactjs.org/), [Vite](https://vitejs.dev/), and [TypeScript](https://www.typescriptlang.org/).
@@ -137,6 +136,118 @@ The backend exposes the following main endpoints:
 -   `DELETE /notes/{note_id}`: Deletes a note.
 
 Check the backend code in `backend/main.py` for more details on the API.
+
+## Deployment & Authentication
+
+This guide details how to deploy the full-stack application to production using Fly.io for the backend, Netlify for the frontend, and Cloudflare for DNS and authentication.
+
+The final architecture uses Cloudflare Zero Trust to protect both the frontend and backend. Users log in with a configured identity provider (e.g., Google) to access the frontend. The frontend communicates with the backend via a Netlify proxy, which securely injects a Cloudflare Service Token to authenticate its requests to the backend API.
+
+### 1. Prerequisites
+
+- A registered domain name managed by Cloudflare.
+- Accounts for Fly.io, Netlify, and Cloudflare.
+- `flyctl` CLI installed.
+
+### 2. Backend Deployment on Fly.io
+
+1.  **Launch the App on Fly.io:**
+    Navigate to the `backend` directory and run the launch command. This will generate a `fly.toml` configuration file.
+    ```bash
+    cd backend
+    flyctl launch --name your-app-name-api
+    ```
+    When prompted, do **not** set up a database. We will use a persistent volume for the SQLite file.
+
+2.  **Configure a Persistent Volume:**
+    The SQLite database needs to be stored on a persistent volume to survive deployments. Create a volume for your app (e.g., 1GB).
+    ```bash
+    flyctl volumes create data --size 1
+    ```
+    Your `fly.toml` should already contain the correct `[[mounts]]` section to use this volume.
+
+3.  **Set Secrets:**
+    The backend needs your Toggl credentials. Set them as secrets on Fly.io.
+    ```bash
+    flyctl secrets set TOGGL_TOKEN="YOUR_TOGGL_TOKEN" WORKSPACE_ID="YOUR_WORKSPACE_ID"
+    ```
+
+4.  **Deploy the Backend:**
+    ```bash
+    flyctl deploy
+    ```
+    After deployment, Fly.io will give you a hostname like `your-app-name-api.fly.dev`.
+
+### 3. DNS Configuration on Cloudflare
+
+1.  **Create a CNAME record for your backend API.** This must be set to **DNS Only** (grey cloud) to work with Fly.io's SSL certificate provisioning.
+    - **Type:** `CNAME`
+    - **Name:** `api.your-domain.com`
+    - **Target:** `your-app-name-api.fly.dev`
+    - **Proxy status:** DNS Only
+
+2.  **Create a CNAME record for the Fly.io SSL certificate.** Fly.io requires this for domain validation.
+    - **Type:** `CNAME`
+    - **Name:** `_acme-challenge.api`
+    - **Target:** `your-app-name-api.fly.dev`
+    - **Proxy status:** DNS Only
+
+3.  **Point your main frontend domain to Netlify.** The specifics will be provided by Netlify, but it's typically a CNAME record. This one should be **Proxied** (orange cloud) to benefit from Cloudflare's features.
+    - **Type:** `CNAME`
+    - **Name:** `your-app-name.your-domain.com`
+    - **Target:** `your-app.netlify.app`
+    - **Proxy status:** Proxied
+
+### 4. Frontend Deployment on Netlify
+
+1.  **Connect Your Git Repository:**
+    In the Netlify dashboard, add a new site and connect it to the Git repository containing this project.
+
+2.  **Configure Build Settings:**
+    Netlify needs to know how to build the site from the `frontend` subdirectory. Ensure your settings are:
+    - **Base directory:** `frontend`
+    - **Build command:** `pnpm run build`
+    - **Publish directory:** `dist`
+    The `frontend/netlify.toml` file in this repository is already configured with these settings.
+
+3.  **Add Environment Variables for the Service Token:**
+    Later, we will generate a Cloudflare Service Token. Netlify needs to store its credentials. Go to **Site settings > Build & deploy > Environment** and add:
+    - `ACCESS_CLIENT_ID`: The Client ID from the Cloudflare service token.
+    - `ACCESS_CLIENT_SECRET`: The Client Secret from the Cloudflare service token.
+
+4.  **Deploy:**
+    Trigger a deployment on Netlify. It will build and deploy your frontend.
+
+### 5. Authentication with Cloudflare Zero Trust
+
+This is the final step to secure your application.
+
+1.  **Create a Service Token:**
+    - In the Cloudflare Zero Trust dashboard, go to **Access > Service Auth**.
+    - Click **Create Service Token**.
+    - Name it (e.g., `Netlify Proxy`), and click **Generate token**.
+    - **Important:** Copy the `Client ID` and `Client Secret`. Add them to your Netlify environment variables as described in the previous section.
+
+2.  **Create the Frontend Application:**
+    - Go to **Access > Applications** and **Add an application** of type **Self-hosted**.
+    - **Application name:** `Your App Name Frontend`
+    - **Application domain:** `your-app-name.your-domain.com`
+    - **Policies:** Create an `Allow` policy that requires authentication from your chosen provider (e.g., a rule for `Emails` matching your Google account).
+
+3.  **Create the Backend Application:**
+    - Add another **Self-hosted** application.
+    - **Application name:** `Your App Name Backend`
+    - **Application domain:** `api.your-domain.com`
+    - **Policies:** Create two policies. The order does not matter.
+        - **Policy 1: Allow Netlify**
+            - **Action:** `Service Auth`
+            - **Rule:** Create a rule where **Service Token** `is` the `Netlify Proxy` token you created.
+        - **Policy 2: Allow Your Login** (for accessing `/docs` in the browser)
+            - **Action:** `Allow`
+            - **Rule:** Create a rule for `Emails` matching your personal email.
+    - Save the application. You do not need to configure CORS settings for the backend app, as all requests come from the Netlify proxy.
+
+Once these steps are complete, your application will be fully deployed and secured.
 
 ## Future Improvements
 
