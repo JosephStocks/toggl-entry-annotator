@@ -9,5 +9,5 @@ to = "https://api.togglnotes.josephpstocks.com/:splat"
 status = 200
 force = true
 [redirects.headers]
-X-Cf-Access-Client-Id = "ACCESS_CLIENT_ID_PLACEHOLDER"
-X-Cf-Access-Client-Secret = "ACCESS_CLIENT_SECRET_PLACEHOLDER"
+X-Cf-Access-Client-Id = "${ACCESS_CLIENT_ID}"
+X-Cf-Access-Client-Secret = "${ACCESS_CLIENT_SECRET}"
