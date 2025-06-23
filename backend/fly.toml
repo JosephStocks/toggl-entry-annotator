@@ -7,17 +7,17 @@ app = 'togglnotes-api'
 primary_region = 'dfw'
 
 [build]
-  dockerfile = 'Dockerfile'
+dockerfile = 'Dockerfile'
 
 [[mounts]]
-  source = 'data'
-  destination = '/data'
+source = 'data'
+destination = '/data'
 
 [http_service]
-  internal_port = 8080
-  auto_start_machines = true
+internal_port = 8080
+auto_start_machines = true
 
 [[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
-  cpus = 1
+memory = '1gb'
+cpu_kind = 'shared'
+cpus = 1
