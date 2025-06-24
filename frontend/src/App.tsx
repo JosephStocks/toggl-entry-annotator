@@ -341,9 +341,12 @@ export default function App() {
               <IconChevronLeft size={20} />
             </ActionIcon>
 
-            <Stack align="center" gap="xs">
+            <Stack align="center" gap="xs" style={{ textAlign: 'center' }}>
               <Title order={3}>
-                {format(currentDate, 'EEEE, MMMM d, yyyy')}
+                {format(currentDate, 'EEEE, ')}
+                <Box component="span" display={{ base: 'block', xs: 'inline' }}>
+                  {format(currentDate, 'MMMM d, yyyy')}
+                </Box>
               </Title>
 
               {!isToday(currentDate) && (
