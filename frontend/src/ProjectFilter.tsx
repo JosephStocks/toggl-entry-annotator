@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Checkbox, Stack, Title, Card, Text, Group, Button } from '@mantine/core';
+import {
+    Checkbox,
+    Title,
+    Card,
+    Text,
+    Group,
+    Collapse,
+    ActionIcon,
+    Box,
+    Stack,
+} from '@mantine/core';
+import { IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 
 // --- API Helper ----------------------------------------
 const API_BASE = '/api';
@@ -27,6 +38,7 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
     const [projects, setProjects] = useState<string[]>([]);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [error, setError] = useState<string | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
 
     useEffect(() => {
         const loadProjects = async () => {
@@ -55,54 +67,43 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
         onChange(newSelected);
     };
 
-    const handleToggleAll = () => {
-        if (selected.size === projects.length) {
-            // Deselect all
-            setSelected(new Set());
-            onChange(new Set());
-        } else {
-            // Select all
-            const allProjects = new Set(projects);
-            setSelected(allProjects);
-            onChange(allProjects);
-        }
-    };
-
-    const allProjectsSelected = projects.length > 0 && selected.size === projects.length;
-
     if (error) {
         return <Text color="red">Error loading projects: {error}</Text>;
     }
 
     return (
-        <Card withBorder shadow="sm">
-            <Stack gap="xs">
+        <Card withBorder shadow="sm" p={0}>
+            <Box
+                onClick={() => setIsOpen(o => !o)}
+                style={{ cursor: 'pointer' }}
+                py="sm"
+                px="md"
+            >
                 <Group justify="space-between">
-                    <Title order={4}>Filter by Project</Title>
-                    {projects.length > 0 &&
-                        <Button
-                            variant="subtle"
-                            size="xs"
-                            onClick={handleToggleAll}
-                        >
-                            {allProjectsSelected ? 'Deselect all' : 'Select all'}
-                        </Button>
-                    }
+                    <Title order={4} m={0}>Filter by Project</Title>
+                    <ActionIcon variant="subtle" color="gray">
+                        {isOpen ? <IconChevronUp size={20} /> : <IconChevronDown size={20} />}
+                    </ActionIcon>
                 </Group>
-
-                {projects.length === 0 ? (
-                    <Text size="sm" c="dimmed">No projects found to filter.</Text>
-                ) : (
-                    projects.map(project => (
-                        <Checkbox
-                            key={project}
-                            label={project}
-                            checked={selected.has(project)}
-                            onChange={e => handleProjectToggle(project, e.currentTarget.checked)}
-                        />
-                    ))
-                )}
-            </Stack>
+            </Box>
+            <Collapse in={isOpen}>
+                <Box px="md" pb="md">
+                    {projects.length === 0 ? (
+                        <Text size="sm" c="dimmed" mt="xs">No projects found to filter.</Text>
+                    ) : (
+                        <Stack gap="xs" m="xs">
+                            {projects.map(project => (
+                                <Checkbox
+                                    key={project}
+                                    label={project}
+                                    checked={selected.has(project)}
+                                    onChange={e => handleProjectToggle(project, e.currentTarget.checked)}
+                                />
+                            ))}
+                        </Stack>
+                    )}
+                </Box>
+            </Collapse>
         </Card>
     );
 } 
