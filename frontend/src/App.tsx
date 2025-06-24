@@ -25,7 +25,6 @@ import {
   IconInfoCircle,
   IconRefresh,
   IconClock,
-  IconPlus,
   IconChevronDown,
   IconChevronUp,
 } from '@tabler/icons-react';

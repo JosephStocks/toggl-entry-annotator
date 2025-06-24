@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
     Checkbox,
-    Stack,
     Title,
     Card,
     Text,
