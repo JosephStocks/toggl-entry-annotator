@@ -92,8 +92,8 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
             <Box
                 onClick={() => setIsOpen(o => !o)}
                 style={{ cursor: 'pointer' }}
+                py="sm"
                 px="md"
-                py="xs"
             >
                 <Group justify="space-between">
                     <Title order={4} m={0}>Filter by Project</Title>
@@ -103,11 +103,11 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
                 </Group>
             </Box>
             <Collapse in={isOpen}>
-                <Box px="md" pb="md" pt="xs">
+                <Box px="md" pb="md">
                     {projects.length > 0 &&
                         <Button
                             variant="subtle"
-                            size="xs"
+                            size="sm"
                             onClick={handleToggleAll}
                             fullWidth
                             mb="xs"
@@ -124,6 +124,7 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
                                 label={project}
                                 checked={selected.has(project)}
                                 onChange={e => handleProjectToggle(project, e.currentTarget.checked)}
+                                styles={{ root: { marginBottom: 'var(--mantine-spacing-xs)' } }}
                             />
                         ))
                     )}

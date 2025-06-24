@@ -436,8 +436,8 @@ export default function App() {
                     </Stack>
                   }
 
-                  <Collapse in={visibleNoteInputId === entry.entry_id} mt="sm">
-                    <Group gap="xs">
+                  <Collapse in={visibleNoteInputId === entry.entry_id}>
+                    <Group gap="xs" mt="sm">
                       <TextInput
                         placeholder="Add a note..."
                         size="sm"
