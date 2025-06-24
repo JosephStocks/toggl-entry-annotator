@@ -77,8 +77,8 @@ function SyncPanel({ onSyncComplete }: SyncPanelProps) {
       <Box
         onClick={() => setIsOpen(o => !o)}
         style={{ cursor: 'pointer' }}
+        py="sm"
         px="md"
-        py="xs"
       >
         <Group justify="space-between">
           <Group>
@@ -91,7 +91,7 @@ function SyncPanel({ onSyncComplete }: SyncPanelProps) {
         </Group>
       </Box>
       <Collapse in={isOpen}>
-        <Box px="md" pb="md" pt="sm">
+        <Box px="md" pb="md">
           <Stack gap="sm">
             <Text size="sm" c="dimmed">
               Use these actions to pull data from the Toggl API into your local
