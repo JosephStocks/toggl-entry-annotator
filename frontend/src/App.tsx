@@ -17,6 +17,7 @@ import {
   Alert,
   Grid,
   Box,
+  Container,
 } from '@mantine/core';
 import {
   IconChevronLeft,
@@ -305,7 +306,7 @@ export default function App() {
   const totalSeconds = filteredEntries.reduce((acc, e) => acc + e.seconds, 0);
 
   return (
-    <div style={{ padding: '2rem' }}>
+    <Container size="lg" my="md">
       <SyncPanel onSyncComplete={() => queryClient.invalidateQueries({ queryKey: ['entries'] })} />
 
       <Grid>
@@ -504,6 +505,6 @@ export default function App() {
           )}
         </Grid.Col>
       </Grid>
-    </div>
+    </Container>
   );
 }
