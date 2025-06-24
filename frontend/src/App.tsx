@@ -394,7 +394,7 @@ export default function App() {
           {!loading && !error && filteredEntries.length > 0 && (
             <Stack gap="sm" mt="md">
               {filteredEntries.map((entry) => (
-                <Card key={entry.entry_id} withBorder>
+                <Card key={entry.entry_id} withBorder py="xs" px="sm">
                   <Group justify="space-between" align="flex-start">
                     <div className="flex-1">
                       <Text fw={600} className="mb-1">{entry.description || <span style={{ color: 'gray', fontStyle: 'italic' }}>No description</span>}</Text>
