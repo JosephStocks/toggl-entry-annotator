@@ -24,6 +24,9 @@ import {
   IconInfoCircle,
   IconRefresh,
   IconClock,
+  IconPlus,
+  IconChevronDown,
+  IconChevronUp,
 } from '@tabler/icons-react';
 import { format, addDays, subDays } from 'date-fns';
 import { ProjectFilter } from './ProjectFilter.tsx';
@@ -51,6 +54,7 @@ function SyncPanel({ onSyncComplete }: SyncPanelProps) {
   const [loading, setLoading] = useState<'full' | 'recent' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   const handleSync = async (type: 'full' | 'recent') => {
     setLoading(type);
@@ -70,36 +74,46 @@ function SyncPanel({ onSyncComplete }: SyncPanelProps) {
   return (
     <Card withBorder shadow="sm" className="mb-4">
       <Stack gap="sm">
-        <Group>
-          <IconRefresh size={20} />
-          <Title order={4}>Sync Toggl Data</Title>
+        <Group justify="space-between" style={{ cursor: 'pointer' }} onClick={() => setIsOpen(o => !o)}>
+          <Group>
+            <IconRefresh size={20} />
+            <Title order={4}>Sync Toggl Data</Title>
+          </Group>
+          <ActionIcon variant="subtle" color="gray">
+            {isOpen ? <IconChevronUp size={20} /> : <IconChevronDown size={20} />}
+          </ActionIcon>
         </Group>
-        <Text size="sm" c="dimmed">
-          Use these actions to pull data from the Toggl API into your local database.
-        </Text>
-        <Group>
-          <Button
-            onClick={() => handleSync('recent')}
-            loading={loading === 'recent'}
-            disabled={!!loading}
-            variant="light"
-            leftSection={<IconClock size={16} />}
-          >
-            Sync Recent (2 days)
-          </Button>
-          <Button
-            onClick={() => handleSync('full')}
-            loading={loading === 'full'}
-            disabled={!!loading}
-            color="gray"
-            variant="outline"
-          >
-            Run Full Sync
-          </Button>
-        </Group>
-        <Collapse in={!!message || !!error}>
-          {message && <Alert color="green" icon={<IconInfoCircle />}>{message}</Alert>}
-          {error && <Alert color="red" icon={<IconInfoCircle />}>{error}</Alert>}
+        <Collapse in={isOpen}>
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">
+              Use these actions to pull data from the Toggl API into your local
+              database.
+            </Text>
+            <Group>
+              <Button
+                onClick={() => handleSync('recent')}
+                loading={loading === 'recent'}
+                disabled={!!loading}
+                variant="light"
+                leftSection={<IconClock size={16} />}
+              >
+                Sync Recent (2 days)
+              </Button>
+              <Button
+                onClick={() => handleSync('full')}
+                loading={loading === 'full'}
+                disabled={!!loading}
+                color="gray"
+                variant="outline"
+              >
+                Run Full Sync
+              </Button>
+            </Group>
+            <Collapse in={!!message || !!error}>
+              {message && <Alert color="green" icon={<IconInfoCircle />}>{message}</Alert>}
+              {error && <Alert color="red" icon={<IconInfoCircle />}>{error}</Alert>}
+            </Collapse>
+          </Stack>
         </Collapse>
       </Stack>
     </Card>
@@ -149,6 +163,9 @@ export default function App() {
     new Set()
   );
   const [runningDuration, setRunningDuration] = useState('');
+  const [visibleNoteInputId, setVisibleNoteInputId] = useState<number | null>(
+    null
+  );
 
   // --- Queries -------------------------------------------------
   const entriesQuery = useQuery({
@@ -271,6 +288,7 @@ export default function App() {
     if (!drafts[entryId]?.trim()) return;
     addNoteMutation.mutate({ entryId, text: drafts[entryId]!.trim() });
     setDrafts({ ...drafts, [entryId]: '' });
+    setVisibleNoteInputId(null); // Hide input after adding
   };
 
   const filteredEntries =
@@ -282,10 +300,10 @@ export default function App() {
       <SyncPanel onSyncComplete={() => queryClient.invalidateQueries({ queryKey: ['entries'] })} />
 
       <Grid>
-        <Grid.Col span={3}>
+        <Grid.Col span={{ base: 12, md: 3 }}>
           <ProjectFilter onChange={handleSelectedProjectsChange} />
         </Grid.Col>
-        <Grid.Col span={9} role="main">
+        <Grid.Col span={{ base: 12, md: 9 }} role="main">
           {isToday(currentDate) && currentEntry && (
             <Card withBorder shadow="sm" className="mb-4 bg-blue-50 border-blue-200">
               <Group>
@@ -367,7 +385,7 @@ export default function App() {
             <Stack gap="sm" mt="md">
               {filteredEntries.map((entry) => (
                 <Card key={entry.entry_id} withBorder>
-                  <Group justify="space-between" align="flex-start" >
+                  <Group justify="space-between" align="flex-start">
                     <div className="flex-1">
                       <Text fw={600} className="mb-1">{entry.description || <span style={{ color: 'gray', fontStyle: 'italic' }}>No description</span>}</Text>
                       <Group gap="xs">
@@ -380,7 +398,19 @@ export default function App() {
                         </Text>
                       </Group>
                     </div>
-                    <Text size="xl" fw={600}>{formatDuration(entry.seconds)}</Text>
+                    <Group gap="xs" align="center">
+                      <Text size="xl" fw={600}>{formatDuration(entry.seconds)}</Text>
+                      {visibleNoteInputId !== entry.entry_id && (
+                        <ActionIcon
+                          variant="subtle"
+                          color="gray"
+                          onClick={() => setVisibleNoteInputId(entry.entry_id)}
+                          title="Add note"
+                        >
+                          <IconPlus size={16} />
+                        </ActionIcon>
+                      )}
+                    </Group>
                   </Group>
 
                   {entry.notes.length > 0 &&
@@ -396,37 +426,51 @@ export default function App() {
                     </Stack>
                   }
 
-                  <Group gap="xs" mt="xs">
-                    <TextInput
-                      placeholder="Add a note..."
-                      size="sm"
-                      className="flex-1"
-                      value={drafts[entry.entry_id] ?? ''}
-                      onChange={(ev) =>
-                        setDrafts({ ...drafts, [entry.entry_id]: ev.currentTarget.value })
-                      }
-                      onKeyDown={(ev) => {
-                        if (ev.key === 'Enter' && !ev.shiftKey) {
-                          ev.preventDefault();
-                          handleAddNote(entry.entry_id);
+                  <Collapse in={visibleNoteInputId === entry.entry_id} mt="sm">
+                    <Group gap="xs">
+                      <TextInput
+                        placeholder="Add a note..."
+                        size="sm"
+                        className="flex-1"
+                        value={drafts[entry.entry_id] ?? ''}
+                        onChange={(ev) =>
+                          setDrafts({
+                            ...drafts,
+                            [entry.entry_id]: ev.currentTarget.value,
+                          })
                         }
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      variant="light"
-                      onClick={() => handleAddNote(entry.entry_id)}
-                      disabled={
-                        !drafts[entry.entry_id]?.trim() ||
-                        addNoteMutation.isPending
-                      }
-                    >
-                      {addNoteMutation.isPending &&
-                        addNoteMutation.variables?.entryId === entry.entry_id
-                        ? 'Adding...'
-                        : 'Add'}
-                    </Button>
-                  </Group>
+                        onKeyDown={(ev) => {
+                          if (ev.key === 'Enter' && !ev.shiftKey) {
+                            ev.preventDefault();
+                            handleAddNote(entry.entry_id);
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        variant="light"
+                        onClick={() => handleAddNote(entry.entry_id)}
+                        disabled={
+                          !drafts[entry.entry_id]?.trim() ||
+                          addNoteMutation.isPending
+                        }
+                      >
+                        {addNoteMutation.isPending &&
+                          addNoteMutation.variables?.entryId === entry.entry_id
+                          ? 'Adding...'
+                          : 'Add'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => setVisibleNoteInputId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </Group>
+                  </Collapse>
                 </Card>
               ))}
             </Stack>

@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Checkbox, Stack, Title, Card, Text, Group, Button } from '@mantine/core';
+import {
+    Checkbox,
+    Stack,
+    Title,
+    Card,
+    Text,
+    Group,
+    Button,
+    Collapse,
+    ActionIcon,
+} from '@mantine/core';
+import { IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 
 // --- API Helper ----------------------------------------
 const API_BASE = '/api';
@@ -27,6 +38,7 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
     const [projects, setProjects] = useState<string[]>([]);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [error, setError] = useState<string | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
 
     useEffect(() => {
         const loadProjects = async () => {
@@ -77,31 +89,38 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
     return (
         <Card withBorder shadow="sm">
             <Stack gap="xs">
-                <Group justify="space-between">
+                <Group justify="space-between" onClick={() => setIsOpen(o => !o)} style={{ cursor: 'pointer' }}>
                     <Title order={4}>Filter by Project</Title>
+                    <ActionIcon variant="subtle" color="gray">
+                        {isOpen ? <IconChevronUp size={20} /> : <IconChevronDown size={20} />}
+                    </ActionIcon>
+                </Group>
+
+                <Collapse in={isOpen}>
                     {projects.length > 0 &&
                         <Button
                             variant="subtle"
                             size="xs"
                             onClick={handleToggleAll}
+                            fullWidth
+                            mb="xs"
                         >
                             {allProjectsSelected ? 'Deselect all' : 'Select all'}
                         </Button>
                     }
-                </Group>
-
-                {projects.length === 0 ? (
-                    <Text size="sm" c="dimmed">No projects found to filter.</Text>
-                ) : (
-                    projects.map(project => (
-                        <Checkbox
-                            key={project}
-                            label={project}
-                            checked={selected.has(project)}
-                            onChange={e => handleProjectToggle(project, e.currentTarget.checked)}
-                        />
-                    ))
-                )}
+                    {projects.length === 0 ? (
+                        <Text size="sm" c="dimmed">No projects found to filter.</Text>
+                    ) : (
+                        projects.map(project => (
+                            <Checkbox
+                                key={project}
+                                label={project}
+                                checked={selected.has(project)}
+                                onChange={e => handleProjectToggle(project, e.currentTarget.checked)}
+                            />
+                        ))
+                    )}
+                </Collapse>
             </Stack>
         </Card>
     );
