@@ -391,7 +391,7 @@ export default function App() {
           )}
 
           {!loading && !error && filteredEntries.length > 0 && (
-            <Stack gap="sm" mt="md">
+            <Stack gap="xs" mt="md">
               {filteredEntries.map((entry) => (
                 <Card
                   key={entry.entry_id}
