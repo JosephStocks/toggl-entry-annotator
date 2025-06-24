@@ -394,7 +394,18 @@ export default function App() {
           {!loading && !error && filteredEntries.length > 0 && (
             <Stack gap="sm" mt="md">
               {filteredEntries.map((entry) => (
-                <Card key={entry.entry_id} withBorder py="xs" px="sm">
+                <Card
+                  key={entry.entry_id}
+                  withBorder
+                  py="xs"
+                  px="sm"
+                  onClick={() =>
+                    setVisibleNoteInputId(
+                      visibleNoteInputId === entry.entry_id ? null : entry.entry_id
+                    )
+                  }
+                  style={{ cursor: 'pointer' }}
+                >
                   <Group justify="space-between" align="flex-start">
                     <div className="flex-1">
                       <Text fw={600} className="mb-1">{entry.description || <span style={{ color: 'gray', fontStyle: 'italic' }}>No description</span>}</Text>
@@ -410,21 +421,15 @@ export default function App() {
                     </div>
                     <Group gap="xs" align="center">
                       <Text size="xl" fw={600}>{formatDuration(entry.seconds)}</Text>
-                      {visibleNoteInputId !== entry.entry_id && (
-                        <ActionIcon
-                          variant="subtle"
-                          color="gray"
-                          onClick={() => setVisibleNoteInputId(entry.entry_id)}
-                          title="Add note"
-                        >
-                          <IconPlus size={16} />
-                        </ActionIcon>
-                      )}
                     </Group>
                   </Group>
 
                   {entry.notes.length > 0 &&
-                    <Stack mt="sm" className="pl-3 border-l-2 border-gray-200">
+                    <Stack
+                      mt="sm"
+                      className="pl-3 border-l-2 border-gray-200"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {entry.notes.map((note) => (
                         <div key={note.id} className="bg-gray-50 p-2 rounded text-sm">
                           <Text size="sm">{note.note_text}</Text>
@@ -437,7 +442,11 @@ export default function App() {
                   }
 
                   <Collapse in={visibleNoteInputId === entry.entry_id}>
-                    <Group gap="xs" mt="sm">
+                    <Group
+                      gap="xs"
+                      mt="sm"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <TextInput
                         placeholder="Add a note..."
                         size="sm"
@@ -460,7 +469,10 @@ export default function App() {
                       <Button
                         size="sm"
                         variant="light"
-                        onClick={() => handleAddNote(entry.entry_id)}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          handleAddNote(entry.entry_id);
+                        }}
                         disabled={
                           !drafts[entry.entry_id]?.trim() ||
                           addNoteMutation.isPending
@@ -475,7 +487,10 @@ export default function App() {
                         size="sm"
                         variant="subtle"
                         color="gray"
-                        onClick={() => setVisibleNoteInputId(null)}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setVisibleNoteInputId(null);
+                        }}
                       >
                         Cancel
                       </Button>
