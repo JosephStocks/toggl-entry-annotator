@@ -9,6 +9,7 @@ import {
     Collapse,
     ActionIcon,
     Box,
+    Stack,
 } from '@mantine/core';
 import { IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 
@@ -67,21 +68,6 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
         onChange(newSelected);
     };
 
-    const handleToggleAll = () => {
-        if (selected.size === projects.length) {
-            // Deselect all
-            setSelected(new Set());
-            onChange(new Set());
-        } else {
-            // Select all
-            const allProjects = new Set(projects);
-            setSelected(allProjects);
-            onChange(allProjects);
-        }
-    };
-
-    const allProjectsSelected = projects.length > 0 && selected.size === projects.length;
-
     if (error) {
         return <Text color="red">Error loading projects: {error}</Text>;
     }
@@ -103,29 +89,19 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
             </Box>
             <Collapse in={isOpen}>
                 <Box px="md" pb="md">
-                    {projects.length > 0 &&
-                        <Button
-                            variant="subtle"
-                            size="sm"
-                            onClick={handleToggleAll}
-                            fullWidth
-                            mb="xs"
-                        >
-                            {allProjectsSelected ? 'Deselect all' : 'Select all'}
-                        </Button>
-                    }
                     {projects.length === 0 ? (
-                        <Text size="sm" c="dimmed">No projects found to filter.</Text>
+                        <Text size="sm" c="dimmed" mt="xs">No projects found to filter.</Text>
                     ) : (
-                        projects.map(project => (
-                            <Checkbox
-                                key={project}
-                                label={project}
-                                checked={selected.has(project)}
-                                onChange={e => handleProjectToggle(project, e.currentTarget.checked)}
-                                styles={{ root: { marginBottom: 'var(--mantine-spacing-xs)' } }}
-                            />
-                        ))
+                        <Stack gap="xs" m="xs">
+                            {projects.map(project => (
+                                <Checkbox
+                                    key={project}
+                                    label={project}
+                                    checked={selected.has(project)}
+                                    onChange={e => handleProjectToggle(project, e.currentTarget.checked)}
+                                />
+                            ))}
+                        </Stack>
                     )}
                 </Box>
             </Collapse>
