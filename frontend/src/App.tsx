@@ -398,7 +398,7 @@ export default function App() {
                   key={entry.entry_id}
                   withBorder
                   py="xs"
-                  px="sm"
+                  px="md"
                   onClick={() =>
                     setVisibleNoteInputId(
                       visibleNoteInputId === entry.entry_id ? null : entry.entry_id
@@ -406,7 +406,7 @@ export default function App() {
                   }
                   style={{ cursor: 'pointer' }}
                 >
-                  <Group justify="space-between" align="flex-start">
+                  <Group justify="space-between" align="center">
                     <div className="flex-1">
                       <Text fw={600} className="mb-1">{entry.description || <span style={{ color: 'gray', fontStyle: 'italic' }}>No description</span>}</Text>
                       <Group gap="xs">
