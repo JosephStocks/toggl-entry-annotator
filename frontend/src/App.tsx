@@ -16,6 +16,7 @@ import {
   Collapse,
   Alert,
   Grid,
+  Box,
 } from '@mantine/core';
 import {
   IconChevronLeft,
@@ -72,18 +73,25 @@ function SyncPanel({ onSyncComplete }: SyncPanelProps) {
   };
 
   return (
-    <Card withBorder shadow="sm" className="mb-4">
-      <Stack gap="sm">
-        <Group justify="space-between" style={{ cursor: 'pointer' }} onClick={() => setIsOpen(o => !o)}>
+    <Card withBorder shadow="sm" className="mb-4" p={0}>
+      <Box
+        onClick={() => setIsOpen(o => !o)}
+        style={{ cursor: 'pointer' }}
+        px="md"
+        py="xs"
+      >
+        <Group justify="space-between">
           <Group>
             <IconRefresh size={20} />
-            <Title order={4}>Sync Toggl Data</Title>
+            <Title order={4} m={0}>Sync Toggl Data</Title>
           </Group>
           <ActionIcon variant="subtle" color="gray">
             {isOpen ? <IconChevronUp size={20} /> : <IconChevronDown size={20} />}
           </ActionIcon>
         </Group>
-        <Collapse in={isOpen}>
+      </Box>
+      <Collapse in={isOpen}>
+        <Box px="md" pb="md" pt="sm">
           <Stack gap="sm">
             <Text size="sm" c="dimmed">
               Use these actions to pull data from the Toggl API into your local
@@ -109,13 +117,15 @@ function SyncPanel({ onSyncComplete }: SyncPanelProps) {
                 Run Full Sync
               </Button>
             </Group>
-            <Collapse in={!!message || !!error}>
+          </Stack>
+          <Collapse in={!!message || !!error}>
+            <Box mt="sm">
               {message && <Alert color="green" icon={<IconInfoCircle />}>{message}</Alert>}
               {error && <Alert color="red" icon={<IconInfoCircle />}>{error}</Alert>}
-            </Collapse>
-          </Stack>
-        </Collapse>
-      </Stack>
+            </Box>
+          </Collapse>
+        </Box>
+      </Collapse>
     </Card>
   );
 }

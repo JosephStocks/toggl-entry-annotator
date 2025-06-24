@@ -9,6 +9,7 @@ import {
     Button,
     Collapse,
     ActionIcon,
+    Box,
 } from '@mantine/core';
 import { IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 
@@ -87,16 +88,22 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
     }
 
     return (
-        <Card withBorder shadow="sm">
-            <Stack gap="xs">
-                <Group justify="space-between" onClick={() => setIsOpen(o => !o)} style={{ cursor: 'pointer' }}>
-                    <Title order={4}>Filter by Project</Title>
+        <Card withBorder shadow="sm" p={0}>
+            <Box
+                onClick={() => setIsOpen(o => !o)}
+                style={{ cursor: 'pointer' }}
+                px="md"
+                py="xs"
+            >
+                <Group justify="space-between">
+                    <Title order={4} m={0}>Filter by Project</Title>
                     <ActionIcon variant="subtle" color="gray">
                         {isOpen ? <IconChevronUp size={20} /> : <IconChevronDown size={20} />}
                     </ActionIcon>
                 </Group>
-
-                <Collapse in={isOpen}>
+            </Box>
+            <Collapse in={isOpen}>
+                <Box px="md" pb="md" pt="xs">
                     {projects.length > 0 &&
                         <Button
                             variant="subtle"
@@ -120,8 +127,8 @@ export function ProjectFilter({ onChange }: ProjectFilterProps) {
                             />
                         ))
                     )}
-                </Collapse>
-            </Stack>
+                </Box>
+            </Collapse>
         </Card>
     );
 } 
