@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-# This script is run by a daily scheduled machine on Fly.io
+# This script is run by a daily cron job on the main Fly.io app machine.
 # It backs up the SQLite database to a Google Drive folder.
 
 # Configure rclone from the secret environment variable
