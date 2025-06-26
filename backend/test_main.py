@@ -6,6 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 import db
+
+# Mock environment variables for middleware before it's imported from `main`
+os.environ["CF_ACCESS_CLIENT_ID"] = "test_id"
+os.environ["CF_ACCESS_CLIENT_SECRET"] = "test_secret"
+os.environ["CF_CHECK"] = "false"
+
 from main import _epoch_from_dt, app
 from schema import init_database
 

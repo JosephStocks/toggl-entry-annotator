@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import sqlite3
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 
 import toggl
 from db import get_db
+from middleware import CloudflareServiceTokenMiddleware
 from schema import init_database
 
 # -------------------------------------------------
@@ -26,7 +28,17 @@ allowed_origins = [origin.strip() for origin in origins_str.split(",")]
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Run database initialization on startup."""
+    logger.info("Running startup tasks...")
+    init_database()
+    logger.info("Startup tasks complete.")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -34,14 +46,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Run database initialization on startup."""
-    logger.info("Running startup tasks...")
-    init_database()
-    logger.info("Startup tasks complete.")
+app.add_middleware(CloudflareServiceTokenMiddleware)
 
 
 # -------------------------------------------------
