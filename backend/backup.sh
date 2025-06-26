@@ -6,7 +6,10 @@ set -e
 
 # Configure rclone from the secret environment variable
 # This creates the config file in the default location (~/.config/rclone/rclone.conf)
-echo "$RCLONE_CONFIG" > $(rclone config file | tail -n 1)
+# Using printf is more robust for multiline secrets than echo.
+RCLONE_CONFIG_PATH=$(rclone config file | tail -n 1)
+mkdir -p "$(dirname "$RCLONE_CONFIG_PATH")"
+printf "%s" "$RCLONE_CONFIG" > "$RCLONE_CONFIG_PATH"
 
 BACKUP_DIR=/tmp/backups
 DB_FILE=time_tracking.sqlite
