@@ -7,14 +7,17 @@ from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN
 
 
 class CloudflareServiceTokenMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, *, skip_paths: set[str] | None = None):
+    def __init__(self, app, *, protected_paths: set[str] | None = None):
         super().__init__(app)
         self.expected_id = os.environ["CF_ACCESS_CLIENT_ID"]
         self.expected_secret = os.environ["CF_ACCESS_CLIENT_SECRET"]
-        self.skip_paths = skip_paths or {"/docs", "/openapi.json", "/"}
+        self.protected_paths = protected_paths or {"/sync/full", "/sync/recent"}
 
     async def dispatch(self, request, call_next):
-        if request.url.path in self.skip_paths or os.getenv("CF_CHECK", "true") != "true":
+        is_protected = request.url.path in self.protected_paths
+        is_checking_enabled = os.getenv("CF_CHECK", "true") == "true"
+
+        if not is_protected or not is_checking_enabled:
             return await call_next(request)
 
         cid = request.headers.get("Cf-Access-Client-Id")
