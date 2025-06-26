@@ -11,7 +11,7 @@ class CloudflareServiceTokenMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.expected_id = os.environ["CF_ACCESS_CLIENT_ID"]
         self.expected_secret = os.environ["CF_ACCESS_CLIENT_SECRET"]
-        self.protected_paths = protected_paths or {"/sync/full", "/sync/recent"}
+        self.protected_paths = protected_paths or set()
 
     async def dispatch(self, request, call_next):
         is_protected = request.url.path in self.protected_paths
