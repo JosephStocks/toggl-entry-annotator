@@ -210,10 +210,13 @@ The final architecture uses Cloudflare Zero Trust to protect both the frontend a
     - **Publish directory:** `dist`
     The `frontend/netlify.toml` file in this repository is already configured with these settings.
 
-3.  **Add Environment Variables for the Service Token:**
-    Later, we will generate a Cloudflare Service Token. Netlify needs to store its credentials. Go to **Site settings > Build & deploy > Environment** and add:
-    - `ACCESS_CLIENT_ID`: The Client ID from the Cloudflare service token.
-    - `ACCESS_CLIENT_SECRET`: The Client Secret from the Cloudflare service token.
+3.  **(Optional) Add Service-Token Environment Variables**
+    If you decide to re-enable the backend's *service-token* middleware (see below),
+    Netlify must be able to inject those headers.  Add the following build-time
+    variables under **Site settings → Build & deploy → Environment**:
+    - `VITE_CF_ACCESS_CLIENT_ID` – the Service-Token *Client ID*
+    - `VITE_CF_ACCESS_CLIENT_SECRET` – the Service-Token *Client Secret*
+    (Variables need the `VITE_` prefix so Vite exposes them to the browser bundle.)
 
 4.  **Deploy:**
     Trigger a deployment on Netlify. It will build and deploy your frontend.
@@ -234,7 +237,18 @@ This is the final step to secure your application.
     - **Application domain:** `your-app-name.your-domain.com`
     - **Policies:** Create an `Allow` policy that requires authentication from your chosen provider (e.g., a rule for `Emails` matching your Google account).
 
-3.  **Create the Backend Application:**
+3.  **Create the Backend Application (Service-token route, optional):**
+    The backend can be left behind Cloudflare Access *without* a service token
+    because the API is consumed only by you and your spouse.  If you later want
+    automated jobs (or another site) to call protected routes, create an Access
+    **Service Token** and attach it here.  The policies would look like:
+        - **Policy 1: Allow Service-Token** (action: *Service Auth*)
+        - **Policy 2: Allow Interactive Login** (action: *Allow* → email match)
+
+    The backend code expects the token values in environment variables
+    `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (Fly secrets).
+
+4.  **Create the Backend Application:**
     - Add another **Self-hosted** application.
     - **Application name:** `Your App Name Backend`
     - **Application domain:** `api.your-domain.com`
@@ -247,7 +261,30 @@ This is the final step to secure your application.
             - **Rule:** Create a rule for `Emails` matching your personal email.
     - Save the application. You do not need to configure CORS settings for the backend app, as all requests come from the Netlify proxy.
 
-Once these steps are complete, your application will be fully deployed and secured.
+### 6. (Optional) Re-enabling Service-token Checks
+
+`CloudflareServiceTokenMiddleware` is included in the backend but ships with an
+empty `protected_paths` set, meaning **no route is currently guarded**.  This
+fits the current use-case (two trusted users behind Cloudflare Access).  To
+lock down administrative routes again you can:
+
+```python
+# main.py
+app.add_middleware(
+    CloudflareServiceTokenMiddleware,
+    protected_paths={"/sync/full", "/sync/recent"},
+)
+```
+
+Set `CF_CHECK=true` (default) on Fly and provide the `CF_ACCESS_CLIENT_*`
+secrets.  The frontend must then send the two headers, which you can enable by
+defining `VITE_CF_ACCESS_CLIENT_*` at build time as shown above.
+
+---
+
+Once these steps are complete, your application will be deployed and, depending
+on your chosen configuration, protected either by Cloudflare Access alone or
+by both Access **and** a service-token layer.
 
 ## Future Improvements
 
