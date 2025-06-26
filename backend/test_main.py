@@ -1,12 +1,13 @@
 import os
-import sqlite3
 from datetime import UTC, date, datetime
 from unittest.mock import call, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+import db
 from main import _epoch_from_dt, app
+from schema import init_database
 
 client = TestClient(app)
 
@@ -38,37 +39,10 @@ def mock_get_no_current_entry(mocker):
 test_db_path = "test_time_tracking.sqlite"
 
 def setup_module(module):
-    # Create tables in the test DB
-    schema = """
-    CREATE TABLE IF NOT EXISTS time_entries (
-        entry_id    INTEGER PRIMARY KEY,
-        description TEXT NOT NULL,
-        project_id  INTEGER NOT NULL,
-        project_name TEXT NOT NULL,
-        seconds     INTEGER NOT NULL,
-        start       TEXT NOT NULL,
-        stop        TEXT,
-        at          TEXT NOT NULL,
-        start_ts    INTEGER NOT NULL,
-        stop_ts     INTEGER,
-        at_ts       INTEGER NOT NULL,
-        tag_ids     TEXT,
-        tag_names   TEXT
-    );
-    CREATE TABLE IF NOT EXISTS entry_notes (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        entry_id    INTEGER NOT NULL,
-        note_text   TEXT NOT NULL,
-        created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-        FOREIGN KEY (entry_id) REFERENCES time_entries(entry_id) ON DELETE CASCADE
-    );
-    """
-    with sqlite3.connect(test_db_path) as db:
-        db.executescript(schema)
-        db.commit()
-    # Patch the DB_PATH in main.py
-    import main
-    main.DB_PATH = test_db_path
+    # Use a test-specific DB path
+    db.DB_PATH = test_db_path
+    # Create tables in the test DB using the centralized schema
+    init_database()
 
 def teardown_module(module):
     if os.path.exists(test_db_path):
@@ -85,15 +59,15 @@ def test_get_time_entries_invalid_range():
 
 def test_create_and_delete_note():
     # Insert a time entry to attach a note to
-    with sqlite3.connect(test_db_path) as db:
-        db.execute("INSERT INTO time_entries (entry_id, description, project_id, project_name, seconds, start, at, start_ts, at_ts, tag_ids, tag_names) VALUES (1, 'desc', 1, 'proj', 60, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 1, 1, '[]', '[]')")
-        db.commit()
+    with db.create_connection() as conn:
+        conn.execute("INSERT INTO time_entries (entry_id, description, project_id, project_name, seconds, start, at, start_ts, at_ts, tag_ids, tag_names) VALUES (1, 'desc', 1, 'proj', 60, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 1, 1, '[]', '[]')")
+        conn.commit()
     # Add a note
     resp = client.post("/notes", json={"entry_id": 1, "note_text": "Test note"})
     assert resp.status_code == 201
     # Check note exists
-    with sqlite3.connect(test_db_path) as db:
-        cur = db.execute("SELECT * FROM entry_notes WHERE entry_id=1")
+    with db.create_connection() as conn:
+        cur = conn.execute("SELECT * FROM entry_notes WHERE entry_id=1")
         notes = cur.fetchall()
         assert len(notes) == 1
     # Delete the note
@@ -120,10 +94,10 @@ def test_epoch_from_dt_naive():
 
 def test_time_entries_date_range_edges():
     # Clear tables
-    with sqlite3.connect(test_db_path) as db:
-        db.execute("DELETE FROM entry_notes")
-        db.execute("DELETE FROM time_entries")
-        db.commit()
+    with db.create_connection() as conn:
+        conn.execute("DELETE FROM entry_notes")
+        conn.execute("DELETE FROM time_entries")
+        conn.commit()
     # Insert entries at various edges
     entries = [
         # entry_id, start_iso, start_ts
@@ -134,12 +108,12 @@ def test_time_entries_date_range_edges():
         (14, '2025-01-01T23:59:59Z', 1735775999),  # just before end (should be included)
     ]
     for eid, start_iso, start_ts in entries:
-        with sqlite3.connect(test_db_path) as db:
-            db.execute(
+        with db.create_connection() as conn:
+            conn.execute(
                 "INSERT INTO time_entries (entry_id, description, project_id, project_name, seconds, start, at, start_ts, at_ts, tag_ids, tag_names) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (eid, f"desc{eid}", 1, "proj", 60, start_iso, start_iso, start_ts, start_ts, "[]", "[]")
             )
-            db.commit()
+            conn.commit()
     # Query for window: 2025-01-01T00:00:00Z (1735689600) <= start_ts < 2025-01-02T00:00:00Z (1735776000)
     resp = client.get("/time_entries?start_iso=2025-01-01T00:00:00Z&end_iso=2025-01-02T00:00:00Z")
     assert resp.status_code == 200

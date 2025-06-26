@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import sqlite3
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -9,13 +8,13 @@ import httpx
 from dotenv import load_dotenv
 
 import cache
+from db import create_connection
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", "data/time_tracking.sqlite")
 TOGGL_TOKEN = os.environ.get("TOGGL_TOKEN")
 WORKSPACE_ID = os.environ.get("WORKSPACE_ID")
 
@@ -30,7 +29,7 @@ def _to_utc_iso_and_ts(iso_str: str) -> tuple[str, int]:
 
 def _upsert_sqlite(entry: dict[str, Any]):
     """Insert or update a time entry in the SQLite database."""
-    with sqlite3.connect(DB_PATH) as db:
+    with create_connection() as db:
         db.execute(
             """
             INSERT INTO time_entries (

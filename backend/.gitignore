@@ -17,3 +17,10 @@ digest.txt
 # Ignore all markdown files except for the README markdown
 !README.md
 *.md
+
+# converting jupyter notebooks to python files so ignoring notebook versions
+scripts/*.ipynb
+
+test WAL, SHM files
+*.sqlite-shm
+*.sqlite-wal

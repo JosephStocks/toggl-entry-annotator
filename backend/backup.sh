@@ -17,7 +17,7 @@ DEST_PATH="gdrive:TogglNotesBackups" # "gdrive" is the name of the rclone remote
 TIMESTAMP=$(date +"%Y-%m-%dT%H-%M-%S")
 BACKUP_FILE="$DB_FILE.$TIMESTAMP.bak"
 mkdir -p $BACKUP_DIR
-cp $SOURCE_DB_PATH $BACKUP_DIR/$BACKUP_FILE
+sqlite3 $SOURCE_DB_PATH ".backup '$BACKUP_DIR/$BACKUP_FILE'"
 
 echo "Creating backup: $BACKUP_FILE"
 

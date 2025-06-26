@@ -4,16 +4,18 @@ import os
 import sqlite3
 from datetime import date, datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import toggl
+from db import get_db
+from schema import init_database
 
 # -------------------------------------------------
 # Config
 # -------------------------------------------------
-DB_PATH = os.environ.get("DB_PATH", "data/time_tracking.sqlite")
+# DB_PATH is now in db.py
 
 # Read CORS origins from environment variable
 # The env var should be a comma-separated string of URLs
@@ -32,55 +34,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-def init_database():
-    """Initializes the database and creates tables if they don't exist."""
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
-        # Check if time_entries table exists
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='time_entries'"
-        )
-        if cur.fetchone() is None:
-            logger.info("Creating 'time_entries' table.")
-            cur.execute(
-                """
-                CREATE TABLE time_entries (
-                    entry_id INTEGER PRIMARY KEY,
-                    description TEXT,
-                    project_id INTEGER,
-                    project_name TEXT,
-                    seconds INTEGER,
-                    start TEXT,
-                    stop TEXT,
-                    at TEXT,
-                    start_ts INTEGER,
-                    stop_ts INTEGER,
-                    at_ts INTEGER,
-                    tag_ids TEXT,
-                    tag_names TEXT
-                )
-                """
-            )
-        # Check if entry_notes table exists
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='entry_notes'"
-        )
-        if cur.fetchone() is None:
-            logger.info("Creating 'entry_notes' table.")
-            cur.execute(
-                """
-                CREATE TABLE entry_notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    entry_id INTEGER,
-                    note_text TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (entry_id) REFERENCES time_entries(entry_id)
-                )
-                """
-            )
-        conn.commit()
 
 
 @app.on_event("startup")
@@ -237,17 +190,16 @@ def get_current_entry():
 
 
 @app.get("/projects", response_model=list[str], summary="Get all unique project names")
-def get_projects():
+def get_projects(conn: sqlite3.Connection = Depends(get_db)):  # noqa: B008
     """
     Returns a list of all unique project names from the time_entries table.
     """
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = lambda cursor, row: row[0]  # Return just the first column
-        cur = conn.cursor()
-        projects = cur.execute(
-            "SELECT DISTINCT project_name FROM time_entries WHERE project_name IS NOT NULL ORDER BY project_name"
-        ).fetchall()
-        return projects
+    conn.row_factory = lambda cursor, row: row[0]  # Return just the first column
+    cur = conn.cursor()
+    projects = cur.execute(
+        "SELECT DISTINCT project_name FROM time_entries WHERE project_name IS NOT NULL ORDER BY project_name"
+    ).fetchall()
+    return projects
 
 
 @app.get(
@@ -268,11 +220,11 @@ Returns all time entries whose `start_ts` falls within the given UTC time window
 
 **Timezones:**
 - You must provide timezone-aware datetimes.
-- Clients should convert local boundaries (e.g., days that start at 4 AM) to UTC before calling this endpoint.
+- Clients should convert local boundaries (e.g., days that start at 4 AM) to UTC before calling this endpoint.
 - Use the `'Z'` suffix when possible (e.g., `2025-06-12T04:00:00Z`).
 
 **Example:**
-To fetch all entries that start on June 12, 2025, with a 4 AM local day start in `America/Chicago`:
+To fetch all entries that start on June 12, 2025, with a 4 AM local day start in `America/Chicago`:
 
 ```
 start_iso=2025-06-12T09:00:00Z
@@ -295,6 +247,7 @@ def get_time_entries(
     end_iso: datetime = Query(
         ..., description="Exclusive ISO 8601 UTC datetime (e.g. 2025-06-13T04:00:00Z)"
     ),
+    conn: sqlite3.Connection = Depends(get_db),  # noqa: B008
 ) -> list[TimeEntryWithNotes]:
     if start_iso >= end_iso:
         raise HTTPException(400, "start_iso must be < end_iso")
@@ -318,10 +271,9 @@ def get_time_entries(
     GROUP  BY t.entry_id
     ORDER  BY t.start_ts;
     """
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        rows = cur.execute(sql, (start_ts, end_ts)).fetchall()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    rows = cur.execute(sql, (start_ts, end_ts)).fetchall()
 
     results = []
     for row in rows:
@@ -338,23 +290,27 @@ def get_time_entries(
 
 
 @app.post("/notes", status_code=201)
-def create_note(note: NoteCreate) -> dict[str, str]:
+def create_note(
+    note: NoteCreate, conn: sqlite3.Connection = Depends(get_db)  # noqa: B008
+) -> dict[str, str]:
     """Adds a note to a time entry."""
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            "INSERT INTO entry_notes (entry_id, note_text) VALUES (?, ?)",
-            (note.entry_id, note.note_text),
-        )
+    conn.execute(
+        "INSERT INTO entry_notes (entry_id, note_text) VALUES (?, ?)",
+        (note.entry_id, note.note_text),
+    )
+    conn.commit()
     return {"message": "Note added"}
 
 
 @app.delete("/notes/{note_id}")
-def delete_note(note_id: int) -> dict[str, str]:
+def delete_note(
+    note_id: int, conn: sqlite3.Connection = Depends(get_db)  # noqa: B008
+) -> dict[str, str]:
     """Deletes a note by its ID."""
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.execute("DELETE FROM entry_notes WHERE id = ?", (note_id,))
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Note not found")
+    cur = conn.execute("DELETE FROM entry_notes WHERE id = ?", (note_id,))
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Note not found")
+    conn.commit()
     return {"message": "Note deleted"}
 
 
