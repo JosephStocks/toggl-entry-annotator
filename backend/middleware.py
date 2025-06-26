@@ -11,7 +11,7 @@ class CloudflareServiceTokenMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.expected_id = os.environ["CF_ACCESS_CLIENT_ID"]
         self.expected_secret = os.environ["CF_ACCESS_CLIENT_SECRET"]
-        self.skip_paths = skip_paths or {"/docs", "/openapi.json"}
+        self.skip_paths = skip_paths or {"/docs", "/openapi.json", "/"}
 
     async def dispatch(self, request, call_next):
         if request.url.path in self.skip_paths or os.getenv("CF_CHECK", "true") != "true":
