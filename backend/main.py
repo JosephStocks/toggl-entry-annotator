@@ -59,7 +59,7 @@ class TimeEntryWithNotes(BaseModel):
     project_id: int
     project_name: str
     seconds: int
-    start: str  # ISO‑8601 Z
+    start: str  # ISO-8601 Z
     stop: str | None
     start_ts: int  # epoch UTC
     stop_ts: int | None
@@ -144,7 +144,7 @@ def sync_full():
         }
     except Exception as e:
         logger.error(f"Full sync failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/sync/recent", response_model=SyncResult, summary="Run a sync for recent entries")
@@ -163,7 +163,7 @@ def sync_recent():
             "message": f"Recent sync completed. Synced {count} records.",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get(
@@ -181,7 +181,7 @@ def get_current_entry():
         entry = toggl.get_current_running_entry()
         return entry
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # -------------------------------------------------
@@ -241,10 +241,10 @@ The response includes entry metadata, UTC timestamps (ISO and epoch), and associ
 """,
 )
 def get_time_entries(
-    start_iso: datetime = Query(
+    start_iso: datetime = Query(  # noqa: B008
         ..., description="Inclusive ISO 8601 UTC datetime (e.g. 2025-06-12T04:00:00Z)"
     ),
-    end_iso: datetime = Query(
+    end_iso: datetime = Query(  # noqa: B008
         ..., description="Exclusive ISO 8601 UTC datetime (e.g. 2025-06-13T04:00:00Z)"
     ),
     conn: sqlite3.Connection = Depends(get_db),  # noqa: B008
