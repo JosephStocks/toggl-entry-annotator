@@ -28,6 +28,12 @@ export type SyncResult = {
 // --- API Helpers ----------------------------------------
 const API_BASE = '/api';
 
+// Cloudflare service-token headers (only available in prod build)
+const cfHeaders = {
+    'Cf-Access-Client-Id': import.meta.env.VITE_CF_ACCESS_CLIENT_ID as string | undefined,
+    'Cf-Access-Client-Secret': import.meta.env.VITE_CF_ACCESS_CLIENT_SECRET as string | undefined,
+} as Record<string, string>;
+
 async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE}${url}`, options);
     if (!response.ok) {
@@ -63,4 +69,7 @@ export const addNote = (entryId: number, text: string) =>
 export const fetchCurrentEntry = () => fetchApi<CurrentEntry | null>('/sync/current');
 
 export const runSync = (type: 'full' | 'recent') =>
-    fetchApi<SyncResult>(`/sync/${type}`, { method: 'POST' }); 
+    fetchApi<SyncResult>(`/sync/${type}`, {
+        method: 'POST',
+        headers: cfHeaders,
+    }); 
