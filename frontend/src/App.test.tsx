@@ -130,6 +130,9 @@ describe('App', () => {
         expect(cardRoot).not.toBeNull();
         if (!cardRoot) return;
 
+        // Click the card to reveal the note input
+        await user.click(cardRoot);
+
         const noteInput = within(cardRoot as HTMLElement).getByPlaceholderText('Add a note...') as HTMLElement;
         const addButton = within(cardRoot as HTMLElement).getByRole('button', { name: 'Add' }) as HTMLElement;
 

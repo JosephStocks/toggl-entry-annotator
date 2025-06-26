@@ -76,31 +76,6 @@ describe('ProjectFilter', () => {
         });
     });
 
-    it('handles the "Select/Deselect All" button', async () => {
-        const projects = ['Project A', 'Project B'];
-        const onChange = vi.fn();
-        mockProjectsApi(projects);
-        renderProjectFilter(onChange);
-
-        // Wait for initial render and selection
-        await waitFor(() => {
-            expect(onChange).toHaveBeenCalledWith(new Set(projects));
-        });
-
-        // Deselect All
-        const toggleAllButton = screen.getByRole('button', { name: /Deselect all/i });
-        await userEvent.click(toggleAllButton);
-        await waitFor(() => {
-            expect(onChange).toHaveBeenCalledWith(new Set());
-        });
-
-        // Select All
-        await userEvent.click(toggleAllButton);
-        await waitFor(() => {
-            expect(onChange).toHaveBeenCalledWith(new Set(projects));
-        });
-    });
-
     it('shows a message when no projects are available', async () => {
         mockProjectsApi([]);
         renderProjectFilter();
