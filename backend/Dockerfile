@@ -1,7 +1,7 @@
 FROM python:3.13-slim
 
 # -- tools ---------------------------------------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip cron && \
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip cron tini && \
     curl https://rclone.org/install.sh | bash
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -24,4 +24,5 @@ COPY crontab /etc/cron.d/backup-cron
 RUN chmod 0644 /etc/cron.d/backup-cron
 
 ENV DB_PATH=/data/time_tracking.sqlite
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/entrypoint.sh"]
