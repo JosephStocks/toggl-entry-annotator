@@ -1,40 +1,17 @@
-#!/bin/sh
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-# This script is run by a daily cron job on the main Fly.io app machine.
-# It backs up the SQLite database to a Google Drive folder.
+DB=/data/time_tracking.sqlite      # volume lives at /data per fly.toml  :contentReference[oaicite:6]{index=6}
+DEST="gdrive:TogglNotesBackups"
+STAMP=$(date +"%Y-%m-%dT%H-%M-%S")
+TMP=/tmp/backups
+mkdir -p "$TMP"
 
-# Configure rclone from the secret environment variable
-# This creates the config file in the default location (~/.config/rclone/rclone.conf)
-# Using printf is more robust for multiline secrets than echo.
-RCLONE_CONFIG_PATH=$(rclone config file | tail -n 1)
-mkdir -p "$(dirname "$RCLONE_CONFIG_PATH")"
-printf "%s" "$RCLONE_CONFIG" > "$RCLONE_CONFIG_PATH"
+echo "Starting backup $STAMP"
 
-BACKUP_DIR=/tmp/backups
-DB_FILE=time_tracking.sqlite
-SOURCE_DB_PATH=/data/$DB_FILE
-DEST_PATH="gdrive:TogglNotesBackups" # "gdrive" is the name of the rclone remote, "TogglNotesBackups" is the folder
+sqlite3 "$DB" ".backup '$TMP/$STAMP.bak'"
+rclone copyto "$TMP/$STAMP.bak" "$DEST/$STAMP.bak"
+rclone delete --min-age 7d "$DEST"          # keep last 7 days only
+rm "$TMP/$STAMP.bak"
 
-# Create a timestamped backup file
-TIMESTAMP=$(date +"%Y-%m-%dT%H-%M-%S")
-BACKUP_FILE="$DB_FILE.$TIMESTAMP.bak"
-mkdir -p $BACKUP_DIR
-sqlite3 $SOURCE_DB_PATH ".backup '$BACKUP_DIR/$BACKUP_FILE'"
-
-echo "Creating backup: $BACKUP_FILE"
-
-# Upload the backup file to Google Drive
-rclone copyto $BACKUP_DIR/$BACKUP_FILE "$DEST_PATH/$BACKUP_FILE"
-
-echo "Backup uploaded to $DEST_PATH"
-
-# Clean up old local backups
-rm $BACKUP_DIR/$BACKUP_FILE
-
-# Clean up old remote backups (older than 7 days)
-rclone delete --min-age 7d "$DEST_PATH"
-
-echo "Old backups (older than 7 days) have been removed from remote."
-
-echo "Backup complete." 
+echo "Backup complete"

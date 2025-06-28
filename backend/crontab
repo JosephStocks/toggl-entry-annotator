@@ -1,3 +1,2 @@
-# m h  dom mon dow   command
-0 3 * * * root /app/backup.sh >> /proc/1/fd/1 2>>/proc/1/fd/2
-# An empty line is required at the end of this file for a valid cron file.
+# m  h dom mon dow
+  20   3  *   *   *     /bin/bash -c ". /etc/environment && /app/backup.sh >> /proc/1/fd/1 2>&1"
