@@ -1,2 +1,2 @@
-# m  h dom mon dow
-  20   3  *   *   *     /bin/bash -c ". /etc/environment && /app/backup.sh >> /proc/1/fd/1 2>&1"
+# m h  dom mon dow   command
+32 3 * * * /app/backup.sh >> /proc/1/fd/1 2>&1

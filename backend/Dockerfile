@@ -2,7 +2,7 @@
 FROM python:3.13-slim
 
 # Install system deps
-RUN apt-get update && apt-get install -y curl sqlite3 unzip && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl sqlite3 unzip tini && rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -24,20 +24,14 @@ COPY pyproject.toml .
 RUN uv pip compile pyproject.toml -o requirements.txt && \
     uv pip install --system --no-cache-dir -r requirements.txt
 
+# Add execute permissions for our scripts
+RUN chmod +x /app/entrypoint.sh
+RUN chmod +x /app/backup.sh
+
 # Copy crontab file into image
 COPY crontab /etc/crontab
 RUN chmod 0644 /etc/crontab
 
-# Entrypoint:
-#  1. Dump env so cron can reload it later
-#  2. Materialise the rclone config file from the secret text
-#  3. Start supercronic in the background
-#  4. Exec the web server (so the container only has one PID 1)
-ENTRYPOINT ["/bin/bash", "-c", "\
-    printenv > /etc/environment && \
-    mkdir -p /root/.config/rclone && \
-    printf '%s\n' \"$RCLONE_CONF\" > /root/.config/rclone/rclone.conf && \
-    export RCLONE_CONFIG=/root/.config/rclone/rclone.conf && \
-    supercronic /etc/crontab & \
-    exec uvicorn main:app --host 0.0.0.0 --port 8080 \
-    "]
+# Use tini to properly manage container processes
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/app/entrypoint.sh"]
