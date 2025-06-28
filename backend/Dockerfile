@@ -2,7 +2,7 @@
 FROM python:3.13-slim
 
 # Install system deps
-RUN apt-get update && apt-get install -y curl sqlite3 unzip tini && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl sqlite3 unzip && rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -33,5 +33,4 @@ COPY crontab /etc/crontab
 RUN chmod 0644 /etc/crontab
 
 # Use tini to properly manage container processes
-ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/entrypoint.sh"]
