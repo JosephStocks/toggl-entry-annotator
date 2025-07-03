@@ -35,6 +35,18 @@ CREATE TABLE IF NOT EXISTS entry_notes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_notes_entry_id ON entry_notes(entry_id);
+
+CREATE TABLE IF NOT EXISTS daily_notes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    date        TEXT NOT NULL UNIQUE,     -- YYYY-MM-DD format
+    note_content TEXT NOT NULL,            -- Markdown content
+    created_at  TEXT NOT NULL
+                 DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at  TEXT NOT NULL
+                 DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_notes_date ON daily_notes(date);
 """
 
 

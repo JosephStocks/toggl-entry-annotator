@@ -6,7 +6,7 @@ DB_PATH = os.environ.get("DB_PATH", "data/time_tracking.sqlite")
 
 def create_connection() -> sqlite3.Connection:
     """Creates a database connection with foreign keys and WAL mode enabled."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     return conn

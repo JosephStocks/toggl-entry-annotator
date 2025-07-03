@@ -44,6 +44,7 @@ import {
   fetchCurrentEntry,
   runSync,
 } from './api.ts';
+import { DailyNoteEditor } from './DailyNoteEditor.tsx';
 
 // --- UI Components ----------------------------------------
 
@@ -308,6 +309,7 @@ export default function App() {
   return (
     <Container size="lg" my="md">
       <SyncPanel onSyncComplete={() => queryClient.invalidateQueries({ queryKey: ['entries'] })} />
+      <DailyNoteEditor date={currentDate} />
 
       <Grid>
         <Grid.Col span={{ base: 12, md: 3 }}>

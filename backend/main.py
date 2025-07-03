@@ -3,7 +3,7 @@ import logging
 import os
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -86,6 +86,19 @@ class SyncResult(BaseModel):
     message: str
 
 
+# Add to Pydantic models section
+class DailyNote(BaseModel):
+    id: int
+    date: str
+    note_content: str
+    created_at: str
+    updated_at: str
+
+
+class DailyNoteUpdate(BaseModel):
+    note_content: str
+
+
 # -------------------------------------------------
 # Helpers
 # -------------------------------------------------
@@ -99,6 +112,14 @@ def _epoch_from_dt(dt: datetime) -> int:
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
         raise ValueError("Datetime must be timezone-aware (RFC3339/ISO-8601)")
     return int(dt.timestamp())  # floor => second precision
+
+
+def iso_utc_now() -> str:
+    return (
+        datetime.now(UTC)
+        .isoformat(timespec="microseconds")  # higher precision
+        .replace("+00:00", "Z")
+    )
 
 
 # -------------------------------------------------
@@ -296,7 +317,8 @@ def get_time_entries(
 
 @app.post("/notes", status_code=201)
 def create_note(
-    note: NoteCreate, conn: sqlite3.Connection = Depends(get_db)  # noqa: B008
+    note: NoteCreate,
+    conn: sqlite3.Connection = Depends(get_db),  # noqa: B008
 ) -> dict[str, str]:
     """Adds a note to a time entry."""
     conn.execute(
@@ -309,7 +331,8 @@ def create_note(
 
 @app.delete("/notes/{note_id}")
 def delete_note(
-    note_id: int, conn: sqlite3.Connection = Depends(get_db)  # noqa: B008
+    note_id: int,
+    conn: sqlite3.Connection = Depends(get_db),  # noqa: B008
 ) -> dict[str, str]:
     """Deletes a note by its ID."""
     cur = conn.execute("DELETE FROM entry_notes WHERE id = ?", (note_id,))
@@ -317,6 +340,63 @@ def delete_note(
         raise HTTPException(status_code=404, detail="Note not found")
     conn.commit()
     return {"message": "Note deleted"}
+
+
+# Add these endpoints
+@app.get(
+    "/daily_notes/{date}",
+    response_model=DailyNote | None,
+    summary="Get daily note for a specific date",
+)
+def get_daily_note(
+    date: str,  # YYYY-MM-DD format
+    conn: sqlite3.Connection = Depends(get_db),  # noqa: B008
+):
+    """Get the daily note for a specific date."""
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    row = cur.execute("SELECT * FROM daily_notes WHERE date = ?", (date,)).fetchone()
+
+    if row:
+        return dict(row)
+    return None
+
+
+@app.put("/daily_notes/{date}", response_model=DailyNote, summary="Create or update daily note")
+def upsert_daily_note(
+    date: str,  # YYYY-MM-DD format
+    note: DailyNoteUpdate,
+    conn: sqlite3.Connection = Depends(get_db),  # noqa: B008
+):
+    """Create or update the daily note for a specific date."""
+    now = iso_utc_now()
+
+    # Check if note exists
+    existing = conn.execute("SELECT id FROM daily_notes WHERE date = ?", (date,)).fetchone()
+
+    if existing:
+        # Update existing
+        conn.execute(
+            """UPDATE daily_notes
+               SET note_content = ?, updated_at = ?
+               WHERE date = ?""",
+            (note.note_content, now, date),
+        )
+    else:
+        # Insert new
+        conn.execute(
+            """INSERT INTO daily_notes (date, note_content, created_at, updated_at)
+               VALUES (?, ?, ?, ?)""",
+            (date, note.note_content, now, now),
+        )
+
+    conn.commit()
+
+    # Return the updated/created note
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM daily_notes WHERE date = ?", (date,)).fetchone()
+
+    return dict(row)
 
 
 # -------------------------------------------------

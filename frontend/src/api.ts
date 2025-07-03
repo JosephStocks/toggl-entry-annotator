@@ -25,6 +25,26 @@ export type SyncResult = {
     message: string;
 };
 
+// Add to types
+export type DailyNote = {
+    id: number;
+    date: string;
+    note_content: string;
+    created_at: string;
+    updated_at: string;
+};
+
+// Add API functions
+export const fetchDailyNote = (date: string) =>
+    fetchApi<DailyNote | null>(`/daily_notes/${date}`);
+
+export const upsertDailyNote = (date: string, content: string) =>
+    fetchApi<DailyNote>(`/daily_notes/${date}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note_content: content }),
+    });
+
 // --- API Helpers ----------------------------------------
 const API_BASE = '/api';
 

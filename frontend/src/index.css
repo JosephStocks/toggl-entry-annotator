@@ -11,3 +11,43 @@
     background-color: var(--mantine-color-gray-1);
     background-color: theme('colors.slate.100');
 } */
+
+/* Add after existing styles */
+.prose {
+    line-height: 1.7;
+    color: #374151;
+}
+
+.prose h1,
+.prose h2,
+.prose h3 {
+    font-weight: 600;
+    line-height: 1.25;
+    margin-bottom: 0.75rem;
+}
+
+.prose p {
+    margin-bottom: 1rem;
+}
+
+.prose ul,
+.prose ol {
+    margin-bottom: 1rem;
+}
+
+.prose li {
+    margin-bottom: 0.25rem;
+}
+
+.prose a {
+    color: #3b82f6;
+    text-decoration: underline;
+}
+
+.prose strong {
+    font-weight: 600;
+}
+
+.prose em {
+    font-style: italic;
+}
