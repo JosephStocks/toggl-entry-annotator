@@ -1,31 +1,45 @@
-import { getDateWindowUTC } from './utils/time.ts';
+// --------------------------------------------------------
+//  src/api.ts – Toggl API client & helper layer
+// --------------------------------------------------------
 
-// --- Types mirroring your API ------------------------------------
-export type Note = { id: number; note_text: string; created_at: string };
+import { getDateWindowUTC } from "./utils/time";
+
 export type Entry = {
     entry_id: number;
     description: string;
-    project_name: string;
+    project_name: string | null;
     seconds: number;
     start: string;
     notes: Note[];
 };
+
+/**
+ *  A note that belongs to a Toggl time-entry.
+ *  `entry_id` is absent while we’re holding the optimistic note client-side,
+ *  then filled in once the server saves and echoes it back.
+ */
+export type Note = {
+    id: number;
+    entry_id?: number;
+    note_text: string;
+    created_at: string;
+};
+
 export type CurrentEntry = {
     id: number;
     description: string;
-    project_name: string;
+    project_name: string | null;
     start: string;
-    duration: number; // is negative
-    project_id: number;
+    duration: number;
+    project_id: number | null;
 };
 
 export type SyncResult = {
     ok: boolean;
     records_synced: number;
-    message: string;
+    message?: string | null;
 };
 
-// Add to types
 export type DailyNote = {
     id: number;
     date: string;
@@ -34,62 +48,103 @@ export type DailyNote = {
     updated_at: string;
 };
 
-// Add API functions
-export const fetchDailyNote = (date: string) =>
-    fetchApi<DailyNote | null>(`/daily_notes/${date}`);
+// --------------------------------------------------------
+// Cloudflare Access Service Token Headers
+// Only included in production when env vars are present
+// --------------------------------------------------------
 
-export const upsertDailyNote = (date: string, content: string) =>
-    fetchApi<DailyNote>(`/daily_notes/${date}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note_content: content }),
-    });
+function buildCfHeaders(): Record<string, string> {
+    const id = import.meta.env.VITE_CF_ACCESS_CLIENT_ID;
+    const secret = import.meta.env.VITE_CF_ACCESS_CLIENT_SECRET;
 
-// --- API Helpers ----------------------------------------
-const API_BASE = '/api';
-
-// Cloudflare service-token headers (only available in prod build)
-const cfHeaders = {
-    'Cf-Access-Client-Id': import.meta.env.VITE_CF_ACCESS_CLIENT_ID as string | undefined,
-    'Cf-Access-Client-Secret': import.meta.env.VITE_CF_ACCESS_CLIENT_SECRET as string | undefined,
-} as Record<string, string>;
-
-async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_BASE}${url}`, options);
-    if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(
-            `HTTP ${response.status} ${response.statusText}: ${errorBody}`
-        );
-    }
-    // Handle cases where response might be empty (e.g., 204 No Content for current entry)
-    if (response.status === 204) {
-        return null as T;
-    }
-    return response.json();
+    return id && secret
+        ? {
+            'Cf-Access-Client-Id': id,
+            'Cf-Access-Client-Secret': secret,
+        }
+        : {}; // local dev: skip headers
 }
 
-// --- Component-specific fetchers -------------------------
-export const fetchEntriesForDate = (date: Date) => {
+function makeOpts(init: RequestInit = {}): RequestInit {
+    return {
+        ...init,
+        headers: {
+            ...(init.headers || {}),
+            ...buildCfHeaders(),
+        },
+    };
+}
+
+// --------------------------------------------------------
+// Generic error helper – covers text vs JSON vs empty
+// --------------------------------------------------------
+
+async function handleResponse(resp: Response) {
+    if (resp.ok) {
+        if (resp.status === 204) return null;
+        return await resp.json();
+    } else {
+        const errText = await resp.text();
+        throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${errText}`);
+    }
+}
+
+// --------------------------------------------------------
+// Core API helpers
+// --------------------------------------------------------
+
+export async function fetchEntriesForDate(date: Date): Promise<Entry[]> {
     const { startIso, endIso } = getDateWindowUTC(date, 4);
-    return fetchApi<Entry[]>(
-        `/time_entries?start_iso=${encodeURIComponent(
-            startIso
-        )}&end_iso=${encodeURIComponent(endIso)}`
+    const url = `/api/time_entries?start_iso=${encodeURIComponent(
+        startIso,
+    )}&end_iso=${encodeURIComponent(endIso)}`;
+
+    const resp = await fetch(url);
+    return handleResponse(resp);
+}
+
+export async function addNote(entryId: number, note: string): Promise<Note> {
+    const resp = await fetch(
+        '/api/notes',
+        makeOpts({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entry_id: entryId, note_text: note }),
+        }),
     );
-};
+    return handleResponse(resp);
+}
 
-export const addNote = (entryId: number, text: string) =>
-    fetchApi<Note>('/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry_id: entryId, note_text: text }),
-    });
+export async function fetchCurrentEntry(): Promise<CurrentEntry | null> {
+    const resp = await fetch('/api/sync/current');
+    return handleResponse(resp);
+}
 
-export const fetchCurrentEntry = () => fetchApi<CurrentEntry | null>('/sync/current');
+export async function runSync(kind: 'full' | 'recent'): Promise<SyncResult> {
+    const resp = await fetch(`/api/sync/${kind}`, makeOpts({ method: 'POST' }));
+    return handleResponse(resp);
+}
 
-export const runSync = (type: 'full' | 'recent') =>
-    fetchApi<SyncResult>(`/sync/${type}`, {
-        method: 'POST',
-        headers: cfHeaders,
-    }); 
+// --------------------------------------------------------
+// Daily Note APIs
+// --------------------------------------------------------
+
+export async function fetchDailyNote(date: string): Promise<DailyNote | null> {
+    const resp = await fetch(`/api/daily_notes/${date}`);
+    return handleResponse(resp);
+}
+
+export async function upsertDailyNote(
+    date: string,
+    content: string,
+): Promise<DailyNote> {
+    const resp = await fetch(
+        `/api/daily_notes/${date}`,
+        makeOpts({
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note_content: content }),
+        }),
+    );
+    return handleResponse(resp);
+}

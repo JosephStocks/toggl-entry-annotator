@@ -64,7 +64,7 @@ function SyncPanel({ onSyncComplete }: SyncPanelProps) {
     setError(null);
     try {
       const result = await runSync(type);
-      setMessage(result.message);
+      setMessage(result.message ?? null);
       onSyncComplete();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sync failed');
@@ -164,6 +164,9 @@ function isToday(date: Date): boolean {
   return date.toDateString() === today.toDateString();
 }
 
+const normaliseProjectName = (name: string | null): string =>
+  name?.trim() || '(No project)';
+
 // -----------------------------------------------------------------
 
 export default function App() {
@@ -182,6 +185,12 @@ export default function App() {
   const entriesQuery = useQuery({
     queryKey: ['entries', currentDate.toISOString().split('T')[0]],
     queryFn: () => fetchEntriesForDate(currentDate),
+    /** ← The select option transforms data *before* it reaches your UI */
+    select: (data) =>
+      data.map((e) => ({
+        ...e,
+        project_name: normaliseProjectName(e.project_name),
+      })),
   });
 
   const currentEntryQuery = useQuery({

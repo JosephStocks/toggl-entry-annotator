@@ -13,4 +13,21 @@ Object.defineProperty(window, 'matchMedia', {
         removeEventListener: () => { },
         dispatchEvent: () => false,
     }),
-}); 
+});
+
+// Mock ResizeObserver for Mantine's ScrollArea component.
+// jsdom, the test environment, doesn't implement this browser API.
+// This mock prevents "ResizeObserver is not defined" errors during tests.
+class ResizeObserver {
+    observe() {
+        // do nothing
+    }
+    unobserve() {
+        // do nothing
+    }
+    disconnect() {
+        // do nothing
+    }
+}
+
+window.ResizeObserver = ResizeObserver;
