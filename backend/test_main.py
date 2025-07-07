@@ -379,3 +379,38 @@ def teardown_function(function):
         with db.create_connection() as conn:
             conn.execute("DELETE FROM daily_notes")
             conn.commit()
+
+
+# A fixture to enable the CF check just for specific tests
+@pytest.fixture
+def cf_check_enabled():
+    with patch.dict(os.environ, {"CF_CHECK": "true"}):
+        yield
+
+
+@pytest.mark.skip(reason="Temporarily disabled until Cloudflare secrets are configured in prod/CI")
+def test_middleware_blocks_unauthenticated(cf_check_enabled):
+    # Assume "/sync/full" is a protected path in your middleware config for this test
+    # 1. Test with no headers
+    response = client.post("/sync/full")
+    assert response.status_code == 401
+    assert "Missing CF service-token headers" in response.json()["detail"]
+
+    # 2. Test with invalid headers
+    headers = {
+        "Cf-Access-Client-Id": "wrong_id",
+        "Cf-Access-Client-Secret": "wrong_secret",
+    }
+    response = client.post("/sync/full", headers=headers)
+    assert response.status_code == 403
+    assert "Invalid service token" in response.json()["detail"]
+
+
+def test_middleware_allows_authenticated(cf_check_enabled, mock_sync_time_entries):
+    # This test assumes the real sync function is mocked
+    headers = {
+        "Cf-Access-Client-Id": "test_id",  # From your os.environ setup
+        "Cf-Access-Client-Secret": "test_secret",
+    }
+    response = client.post("/sync/full", headers=headers)
+    assert response.status_code == 200  # Should now pass through

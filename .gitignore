@@ -1,3 +1,49 @@
-digest.txt
+# ===================================================================
+# Root .gitignore for the sync-toggl-track-events project
+# ===================================================================
+
+# --- General ---
+.DS_Store
+*.log
+*.sw?
+
+# --- IDEs / Editor Files ---
+.vscode/
+.idea/
+
+# --- Environment Variables ---
+# Ignore all .env files...
 .env*
-!.env.cloudflare.example
+# ...but DO commit example files.
+!*.env.example
+!*.env.cloudflare.example
+
+# --- Python / Backend ---
+__pycache__/
+*.py[oc]
+backend/build/
+backend/dist/
+wheels/
+*.egg-info
+.venv/
+.pytest_cache/
+.ruff_cache/
+# Ignore Jupyter Notebooks, which are used for scripts/dev tasks
+backend/**/*.ipynb
+# Ignore all SQLite database files and their journals.
+# This will catch `test_time_tracking.sqlite` at the root
+# and `time_tracking.sqlite` in `backend/data`.
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# --- Node / Frontend ---
+node_modules/
+# Vite's build output directory
+frontend/dist/
+# Optional SSR build output
+frontend/dist-ssr/
+
+# --- Generated Artifacts ---
+# The digest file is a generated artifact for our interaction.
+digest.txt
