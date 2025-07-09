@@ -1,7 +1,8 @@
 """
 Centralized database schema and initialization.
 """
-from db import create_connection
+
+from .db import create_connection
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS time_entries (

@@ -4,9 +4,8 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
+from backend import toggl
 from httpx import HTTPStatusError, Request, Response
-
-import toggl
 
 # A mock response from the Toggl v3 Detailed Reports API
 MOCK_REPORTS_RESPONSE = [
@@ -55,7 +54,7 @@ def mock_env_vars():
 @pytest.fixture
 def mock_create_connection():
     """Mocks the database connection to avoid actual DB writes."""
-    with patch("toggl.create_connection") as mock:
+    with patch("backend.toggl.create_connection") as mock:
         # Create a mock connection and cursor
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -190,7 +189,7 @@ def test_sync_time_entries_api_error(mock_httpx_class, mock_env_vars):
         toggl.sync_time_entries(date(2025, 7, 21), date(2025, 7, 21))
 
 
-@patch("cache.get_project_name", return_value="Cached Project Name")
+@patch("backend.cache.get_project_name", return_value="Cached Project Name")
 @patch("httpx.Client")
 def test_get_current_running_entry(mock_httpx_class, mock_get_project_name, mock_env_vars):
     """

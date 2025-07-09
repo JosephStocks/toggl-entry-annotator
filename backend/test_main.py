@@ -5,15 +5,14 @@ from unittest.mock import call, patch
 import pytest
 from fastapi.testclient import TestClient
 
-import db
-
 # Mock environment variables for middleware before it's imported from `main`
 os.environ["CF_ACCESS_CLIENT_ID"] = "test_id"
 os.environ["CF_ACCESS_CLIENT_SECRET"] = "test_secret"
 os.environ["CF_CHECK"] = "false"
 
-from main import _epoch_from_dt, app
-from schema import init_database
+from backend import db
+from backend.main import _epoch_from_dt, app
+from backend.schema import init_database
 
 client = TestClient(app)
 
@@ -22,7 +21,7 @@ client = TestClient(app)
 @pytest.fixture
 def mock_sync_time_entries(mocker):
     """Mocks the toggl.sync_time_entries function."""
-    return mocker.patch("main.toggl.sync_time_entries", return_value=5)
+    return mocker.patch("backend.main.toggl.sync_time_entries", return_value=5)
 
 
 @pytest.fixture
@@ -36,13 +35,13 @@ def mock_get_current_entry(mocker):
         "project_id": 987,
         "project_name": "API Testing",
     }
-    return mocker.patch("main.toggl.get_current_running_entry", return_value=mock_data)
+    return mocker.patch("backend.main.toggl.get_current_running_entry", return_value=mock_data)
 
 
 @pytest.fixture
 def mock_get_no_current_entry(mocker):
     """Mocks the toggl.get_current_running_entry to return None."""
-    return mocker.patch("main.toggl.get_current_running_entry", return_value=None)
+    return mocker.patch("backend.main.toggl.get_current_running_entry", return_value=None)
 
 
 # Use a test DB for isolation
@@ -188,7 +187,7 @@ def test_get_current_entry_none(mock_get_no_current_entry):
     mock_get_no_current_entry.assert_called_once()
 
 
-@patch("main.date")
+@patch("backend.main.date")
 def test_sync_full_endpoint_chunks_requests(mock_date, mock_sync_time_entries):
     """
     Tests that the /sync/full endpoint correctly chunks requests by year.

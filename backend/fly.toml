@@ -5,6 +5,11 @@
 
 app = 'togglnotes-api'
 primary_region = 'dfw'
+kill_signal = 'SIGINT'  # This is the signal your app receives, as seen in the logs.
+kill_timeout = 20       # Increase the grace period to 10 seconds.
+
+[env]
+DB_PATH = "/data/time_tracking.sqlite"
 
 [build]
 dockerfile = 'Dockerfile'

@@ -9,10 +9,10 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-import toggl
-from db import get_db
-from middleware import CloudflareServiceTokenMiddleware
-from schema import init_database
+from . import toggl
+from .db import get_db
+from .middleware import CloudflareServiceTokenMiddleware
+from .schema import init_database
 
 # -------------------------------------------------
 # Config
@@ -36,6 +36,8 @@ async def lifespan(app: FastAPI):
     init_database()
     logger.info("Startup tasks complete.")
     yield
+    # No shutdown tasks are needed anymore with journal_mode = DELETE.
+    logger.info("Application shutting down.")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -120,6 +122,12 @@ def iso_utc_now() -> str:
         .isoformat(timespec="microseconds")  # higher precision
         .replace("+00:00", "Z")
     )
+
+
+@app.get("/", status_code=200, include_in_schema=False)
+def health_check():
+    """Simple health check endpoint for test runner to poll."""
+    return {"status": "ok"}
 
 
 # -------------------------------------------------

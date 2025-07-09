@@ -1,2 +1,2 @@
 # m h  dom mon dow   command
-51 3 * * * /app/backup.sh >> /proc/1/fd/1 2>&1
+51 3 * * * /app/code/backup.sh >> /proc/1/fd/1 2>&1

@@ -7,8 +7,8 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 
-import cache
-from db import create_connection
+from . import cache
+from .db import create_connection
 
 load_dotenv()
 
@@ -98,9 +98,7 @@ def sync_time_entries(start_date: date, end_date: date) -> int:
     records_synced = 0
     with httpx.Client(auth=auth, timeout=30) as client:
         while True:
-            logger.info(
-                f"Requesting Toggl data with payload: {json.dumps(payload, indent=2)}"
-            )
+            logger.info(f"Requesting Toggl data with payload: {json.dumps(payload, indent=2)}")
             resp = client.post(url, json=payload)
             try:
                 resp.raise_for_status()

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from httpx import Request, Response
 
-import cache
+from backend import cache
 
 # A mock response from the Toggl v9 /me endpoint
 MOCK_ME_RESPONSE = {
@@ -78,8 +78,8 @@ def test_fetch_all_projects_missing_env_vars():
     """
     # Combine all context managers into a single `with` statement.
     with (
-        patch("cache.TOGGL_TOKEN", None),
-        patch("cache.WORKSPACE_ID", None),
+        patch("backend.cache.TOGGL_TOKEN", None),
+        patch("backend.cache.WORKSPACE_ID", None),
         pytest.raises(ValueError, match="TOGGL_TOKEN and WORKSPACE_ID must be set."),
     ):
         cache._fetch_all_projects()
