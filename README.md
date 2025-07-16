@@ -2,7 +2,7 @@
 
 This is a full-stack application for syncing [Toggl Track](https://toggl.com/track/) time entries to a local database. It provides a web interface to view, filter, and annotate your time entries with personal notes.
 
-The main motivation is to have a private, enhanced view of your Toggl data, allowing for more detailed annotations than Toggl's native tags provide.
+The main motivation is to have a private, enhanced view of your Toggl data, allowing for more detailed annotations and daily summaries than Toggl's native features provide.
 
 ## Features
 
@@ -10,12 +10,14 @@ The main motivation is to have a private, enhanced view of your Toggl data, allo
     - Built with [FastAPI](https://fastapi.tiangolo.com/).
     - Syncs Toggl time entries into a local [SQLite](https://www.sqlite.org/index.html) database.
     - Provides a REST API for the frontend to consume.
+    - Containerized with Docker for consistent deployments.
 
 - **Frontend**:
     - Built with [React](https://reactjs.org/), [Vite](https://vitejs.dev/), and [TypeScript](https://www.typescriptlang.org/).
     - UI components from the [Mantine](https://mantine.dev/) library.
     - Uses [TanStack React Query](https://tanstack.com/query/latest) for data fetching, caching, and optimistic UI updates.
     - Daily view of time entries with navigation.
+    - A markdown-enabled editor for daily "end-of-day" notes.
     - Add and delete notes on individual time entries.
     - Filter entries by project.
     - Displays the currently running Toggl timer with a live-updating duration.
@@ -53,15 +55,6 @@ graph TD
 
 -   [Python 3.12+](https://www.python.org/)
 -   [`uv`](https://astral.sh/uv/) (Python package/dependency manager)
-
-    The recommended way to install `uv` is via the official standalone installer script (not via pip):
-    
-    ```sh
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-    
-    For more details and alternative installation methods (including Windows), see the [official uv installation documentation](https://docs.astral.sh/uv/getting-started/installation/#installation-methods).
-
 -   [Node.js and pnpm](https://pnpm.io/installation)
 
 ### 1. Backend Setup
@@ -81,6 +74,7 @@ The backend server is responsible for syncing data from Toggl and providing it t
     Now, edit `.env` and fill in your details:
     -   `TOGGL_TOKEN`: Your Toggl API token, found on your [profile page](https://track.toggl.com/profile).
     -   `WORKSPACE_ID`: Find this in the URL of your Toggl workspace (e.g., `https://track.toggl.com/reports/summary/<WORKSPACE_ID>`).
+    -   **(New)** `DB_PATH`: For local development, set this to the relative path where you want the database stored. The recommended default is: `DB_PATH="data/time_tracking.sqlite"`
 
 3.  **Install Python dependencies:**
     ```bash
@@ -88,18 +82,16 @@ The backend server is responsible for syncing data from Toggl and providing it t
     ```
 
 4.  **Initialize the Database:**
-    The database schema must be created before running the app. The easiest way is to run the first cell of the `full-sync.ipynb` notebook.
-    - Open `backend/full-sync.ipynb` in a Jupyter environment (like VS Code's notebook editor).
-    - Run the first cell to create the `time_entries` and `entry_notes` tables in `data/time_tracking.sqlite`.
+    **(New & Simplified)** The database and its tables are now created **automatically** the first time you run the server. No manual steps are needed.
 
-5.  **Perform Initial Data Sync:**
-    You can run the rest of the `full-sync.ipynb` notebook to populate your database with all your Toggl history. Alternatively, once the server is running, you can use the "Run Full Sync" button in the web UI.
-
-6.  **Run the Backend Server:**
+5.  **Run the Backend Server:**
     ```bash
     uv run uvicorn main:app --host 0.0.0.0 --port 4545 --reload
     ```
-    The API will be available at `http://localhost:4545`.
+    The API will be available at `http://localhost:4545`. The server will create the `data/time_tracking.sqlite` file on its first run.
+
+6.  **(Optional) Perform Initial Data Sync:**
+    Once the server is running, open the web UI and use the "Run Full Sync" button in the "Sync Toggl Data" panel to populate your database with your entire Toggl history.
 
 ### 2. Frontend Setup
 
@@ -134,6 +126,8 @@ The backend exposes the following main endpoints:
 -   `GET /projects`: Returns a list of all unique project names.
 -   `POST /notes`: Adds a note to a time entry.
 -   `DELETE /notes/{note_id}`: Deletes a note.
+-   `GET /daily_notes/{date}`: Gets the daily note for a specific date.
+-   `PUT /daily_notes/{date}`: Creates or updates the daily note for a date.
 
 Check the backend code in `backend/main.py` for more details on the API.
 
@@ -141,7 +135,7 @@ Check the backend code in `backend/main.py` for more details on the API.
 
 This guide details how to deploy the full-stack application to production using Fly.io for the backend, Netlify for the frontend, and Cloudflare for DNS and authentication.
 
-The final architecture uses Cloudflare Zero Trust to protect both the frontend and backend. Users log in with a configured identity provider (e.g., Google) to access the frontend. The frontend communicates with the backend via a Netlify proxy, which securely injects a Cloudflare Service Token to authenticate its requests to the backend API.
+The final architecture uses Cloudflare Zero Trust to protect both the frontend and backend.
 
 ### 1. Prerequisites
 
@@ -151,30 +145,30 @@ The final architecture uses Cloudflare Zero Trust to protect both the frontend a
 
 ### 2. Backend Deployment on Fly.io
 
-1.  **Launch the App on Fly.io:**
-    Navigate to the `backend` directory and run the launch command. This will generate a `fly.toml` configuration file.
+1.  **Login to Fly:**
     ```bash
-    cd backend
-    flyctl launch --name your-app-name-api
+    flyctl auth login
     ```
-    When prompted, do **not** set up a database. We will use a persistent volume for the SQLite file.
 
-2.  **Configure a Persistent Volume:**
+2.  **Create a Persistent Volume:**
     The SQLite database needs to be stored on a persistent volume to survive deployments. Create a volume for your app (e.g., 1GB).
     ```bash
-    flyctl volumes create data --size 1
+    # Note: Replace 'your-app-name-api' with the name in your fly.toml
+    flyctl volumes create data --size 1 --app your-app-name-api
     ```
-    Your `fly.toml` should already contain the correct `[[mounts]]` section to use this volume.
+    Your `fly.toml` is already configured to use this volume at the `/data` mount point.
 
 3.  **Set Secrets:**
     The backend needs your Toggl credentials. Set them as secrets on Fly.io.
     ```bash
-    flyctl secrets set TOGGL_TOKEN="YOUR_TOGGL_TOKEN" WORKSPACE_ID="YOUR_WORKSPACE_ID"
+    # Replace with your actual app name and credentials
+    flyctl secrets set TOGGL_TOKEN="YOUR_TOGGL_TOKEN" WORKSPACE_ID="YOUR_WORKSPACE_ID" --app your-app-name-api
     ```
 
 4.  **Deploy the Backend:**
+    **(New & Simplified)** Since the repository already contains a configured `fly.toml`, you do not need to run `launch`. Simply deploy the existing configuration:
     ```bash
-    flyctl deploy
+    flyctl deploy --config backend/fly.toml
     ```
     After deployment, Fly.io will give you a hostname like `your-app-name-api.fly.dev`.
 
@@ -282,14 +276,11 @@ defining `VITE_CF_ACCESS_CLIENT_*` at build time as shown above.
 
 ---
 
-Once these steps are complete, your application will be deployed and, depending
-on your chosen configuration, protected either by Cloudflare Access alone or
-by both Access **and** a service-token layer.
+Once these steps are complete, your application will be deployed and, depending on your chosen configuration, protected either by Cloudflare Access alone or by both Access **and** a service-token layer.
 
 ## Future Improvements
 
--   **User Authentication**: Secure the application with a login system.
+-   **User Authentication**: Secure the application with a more granular, in-app login system.
 -   **More Advanced Reporting**: Add charts and summaries for time spent on projects.
--   **Containerization**: Add `Dockerfile`s for easier deployment.
 -   **Configuration UI**: Allow setting Toggl credentials from the UI instead of a `.env` file.
--   **Schema Migrations**: Use a tool like Alembic for managing database schema changes. 
+-   **Schema Migrations**: Use a tool like Alembic for managing database schema changes.
