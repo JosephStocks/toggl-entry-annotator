@@ -5,7 +5,15 @@ import sqlite3
 from pathlib import Path
 
 # This default will now be overridden by fly.toml in production
-DB_PATH = os.environ.get("DB_PATH", "data/time_tracking.sqlite")
+DB_PATH = os.environ.get("DB_PATH")
+if not DB_PATH:
+    # Allow a default ONLY for a known "test" environment.
+    if os.environ.get("PYTEST_RUNNING") == "true":
+        DB_PATH = "data/test_db.sqlite"
+    else:
+        raise ValueError(
+            "FATAL: DB_PATH environment variable is not set. Application cannot start."
+        )
 
 
 def create_connection() -> sqlite3.Connection:

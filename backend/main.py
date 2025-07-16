@@ -4,13 +4,14 @@ import os
 import sqlite3
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from . import toggl
-from .db import get_db
+from .db import DB_PATH, get_db
 from .middleware import CloudflareServiceTokenMiddleware
 from .schema import init_database
 
@@ -33,6 +34,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Run database initialization on startup."""
     logger.info("Running startup tasks...")
+
+    db_parent_dir = Path(DB_PATH).parent
+    logger.info(f"Verifying database directory: {db_parent_dir}")
+    if not db_parent_dir.exists():
+        logger.error(f"Database directory {db_parent_dir} does NOT exist. Is the volume mounted?")
+        raise RuntimeError("Database volume not found.")
+    if not os.access(db_parent_dir, os.W_OK):
+        logger.error(f"Database directory {db_parent_dir} is not writable.")
+        raise RuntimeError("Database volume not writable.")
+    logger.info("Database directory verified.")
+
     init_database()
     logger.info("Startup tasks complete.")
     yield
