@@ -18,7 +18,6 @@ from .schema import init_database
 # -------------------------------------------------
 # Config
 # -------------------------------------------------
-# DB_PATH is now in db.py
 
 # Read CORS origins from environment variable
 # The env var should be a comma-separated string of URLs
@@ -34,6 +33,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Run database initialization on startup."""
     logger.info("Running startup tasks...")
+
+    if not DB_PATH:
+        err_msg = "FATAL: DB_PATH environment variable is not set. Application cannot start."
+        logger.error(err_msg)
+        raise ValueError(err_msg)
 
     db_parent_dir = Path(DB_PATH).parent
     logger.info(f"Verifying database directory: {db_parent_dir}")

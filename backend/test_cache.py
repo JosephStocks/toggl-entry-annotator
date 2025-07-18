@@ -1,4 +1,3 @@
-# backend/test_cache.py
 from unittest.mock import MagicMock, patch
 
 import pytest

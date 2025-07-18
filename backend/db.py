@@ -1,23 +1,23 @@
-# backend/db.py
-
 import os
 import sqlite3
 from pathlib import Path
 
 # This default will now be overridden by fly.toml in production
+# or by fixtures during testing.
 DB_PATH = os.environ.get("DB_PATH")
-if not DB_PATH:
-    # Allow a default ONLY for a known "test" environment.
-    if os.environ.get("PYTEST_RUNNING") == "true":
-        DB_PATH = "data/test_db.sqlite"
-    else:
-        raise ValueError(
-            "FATAL: DB_PATH environment variable is not set. Application cannot start."
-        )
+
+# In a test environment, DB_PATH can be None initially, as fixtures will provide it.
+# In a non-test environment, we enforce that it must be set.
+if not DB_PATH and os.environ.get("PYTEST_RUNNING") != "true":
+    raise ValueError("FATAL: DB_PATH environment variable is not set. Application cannot start.")
 
 
 def create_connection() -> sqlite3.Connection:
     """Creates a database connection with foreign keys enabled."""
+    # The DB_PATH is now expected to be valid when this function is called.
+    if not DB_PATH:
+        raise RuntimeError("DB_PATH was not set. Ensure a test fixture or environment provides it.")
+
     db_file = Path(DB_PATH)
     # This line ensures the parent directory exists.
     db_file.parent.mkdir(parents=True, exist_ok=True)

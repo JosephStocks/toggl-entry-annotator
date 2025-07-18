@@ -1,11 +1,11 @@
-# backend/test_toggl.py
 import json
 from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
-from backend import toggl
 from httpx import HTTPStatusError, Request, Response
+
+from backend import toggl
 
 # A mock response from the Toggl v3 Detailed Reports API
 MOCK_REPORTS_RESPONSE = [

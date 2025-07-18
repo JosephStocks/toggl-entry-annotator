@@ -18,6 +18,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.4.0",
+    "pytest-cov>=6.0.0",  # Added code coverage
     "pytest-mock>=3.14.1",
     "ruff>=0.12.0",
 ]
@@ -93,3 +94,46 @@ multiline-quotes = "double"
 known-first-party = ["scrape_roberthalf"]  # Adjust with your module names
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
 combine-as-imports = true
+
+# ==========================================
+# pytest and pytest-cov configuration
+# ==========================================
+
+[tool.pytest.ini_options]
+pythonpath = [".."]
+env = [
+    "PYTEST_RUNNING=true",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/scripts/*",  # Exclude utility scripts
+]
+
+[tool.coverage.report]
+# Fail if coverage is below this threshold
+fail_under = 80
+show_missing = true
+skip_covered = false
+# Lines to exclude from coverage
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

@@ -1,68 +1,35 @@
-# backend/conftest.py
-import os
+import sqlite3
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 
-
-@pytest.fixture(autouse=True, scope="session")
-def set_test_environment():
-    """
-    Set environment variables and ensure the project root is on the path.
-    This runs once per test session.
-    """
-    # 1. Set the PYTEST_RUNNING flag for db.py
-    os.environ["PYTEST_RUNNING"] = "true"
-
-    # 2. Add project root to PYTHONPATH for subprocess calls
-    # This is more robust than relying on the current working directory.
-    project_root = Path(__file__).resolve().parent.parent
-    original_pythonpath = os.environ.get("PYTHONPATH", "")
-    os.environ["PYTHONPATH"] = f"{project_root}:{original_pythonpath}"
-
-    yield
-
-    # Clean up environment variables
-    del os.environ["PYTEST_RUNNING"]
-    os.environ["PYTHONPATH"] = original_pythonpath
+from backend.schema import SCHEMA
 
 
 @pytest.fixture
-def test_db():
+def test_db(tmp_path: Path) -> Generator[sqlite3.Connection]:
     """
-    A fixture that creates a temporary, isolated database for a test function.
-    - It overrides the DB_PATH for the duration of the test.
-    - It ensures the database schema is initialized.
-    - It cleans up the database file after the test is complete.
+    A fixture that creates a temporary, isolated database for a single test function.
+    - It uses pytest's `tmp_path` fixture to create a DB in a temporary directory.
+    - It initializes the schema directly.
+    - It yields a connection.
+    - It guarantees the connection is closed and the temporary file is cleaned up.
     """
-    db_path = "test_db_for_function.sqlite"
-    original_db_path = os.environ.get("DB_PATH")
-    os.environ["DB_PATH"] = db_path
+    db_path = tmp_path / "test_function.sqlite"
 
-    # We need to re-import the db module to pick up the new path
-    # and re-import schema to use the new db connection.
-    import importlib
+    # 1. Create a connection to the temporary database file
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = DELETE")  # Important for test isolation
 
-    from backend import db, schema
+    # 2. Manually initialize the schema
+    conn.executescript(SCHEMA)
+    conn.commit()
 
-    importlib.reload(db)
-    importlib.reload(schema)
-
-    # Ensure the parent directory exists
-    Path(db.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-
-    # Initialize the schema for this specific test DB
-    schema.init_database()
-
-    yield db.create_connection()  # The test runs here
-
-    # --- Teardown ---
-    # Restore the original DB_PATH
-    if original_db_path:
-        os.environ["DB_PATH"] = original_db_path
-    else:
-        del os.environ["DB_PATH"]
-
-    # Cleanup the test database file
-    if os.path.exists(db_path):
-        os.remove(db_path)
+    try:
+        # 3. Yield the connection for the test to use
+        yield conn
+    finally:
+        # 4. Teardown: close the connection. `tmp_path` handles file deletion.
+        conn.close()
