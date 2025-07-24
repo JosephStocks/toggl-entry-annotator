@@ -231,3 +231,50 @@ def test_get_current_running_entry_none(mock_httpx_class, mock_env_vars):
     entry = toggl.get_current_running_entry()
 
     assert entry is None
+
+
+@patch("httpx.Client")
+def test_sync_time_entries_no_results(mock_httpx_class, mock_env_vars, mock_create_connection):
+    """
+    Test a successful sync where the Toggl API returns an empty list.
+    """
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    request = Request("POST", "http://fake-url")
+    # The API returns an empty JSON array
+    mock_client.post.return_value = Response(200, json=[], request=request)
+    mock_httpx_class.return_value = mock_client
+
+    count = toggl.sync_time_entries(date(2025, 7, 21), date(2025, 7, 21))
+
+    assert count == 0  # Should sync 0 records
+    mock_client.post.assert_called_once()  # Should only make one API call
+    mock_create_connection.execute.assert_not_called()  # Should not touch the DB
+
+
+@patch("backend.cache.get_project_name")  # We don't expect this to be called
+@patch("httpx.Client")
+def test_get_current_running_entry_no_project(
+    mock_httpx_class, mock_get_project_name, mock_env_vars
+):
+    """
+    Test fetching a currently running entry that has no project_id.
+    """
+    # This entry is missing the 'project_id' key
+    mock_current_entry = {"id": 456, "description": "Thinking about lunch"}
+    mock_response = Response(
+        200, json=mock_current_entry, request=Request("GET", "http://fake-url")
+    )
+
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.get.return_value = mock_response
+    mock_httpx_class.return_value = mock_client
+
+    entry = toggl.get_current_running_entry()
+
+    assert entry is not None
+    assert entry["id"] == 456
+    assert entry["project_name"] == "No Project"
+    # Ensure the cache was NOT used
+    mock_get_project_name.assert_not_called()

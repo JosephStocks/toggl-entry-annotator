@@ -78,6 +78,84 @@ def mock_get_no_current_entry(mocker):
 # ===================================================================
 
 
+def test_lifespan_success(mocker):
+    """Tests the successful startup path of the lifespan manager."""
+    mocker.patch("backend.main.DB_PATH", "dummy/path/for/testing.sqlite")
+
+    # Mock the other functions used by lifespan
+    mock_init_db = mocker.patch("backend.main.init_database")
+    mock_path = mocker.patch("backend.main.Path")
+    mock_os_access = mocker.patch("os.access", return_value=True)
+
+    # Configure mocks for path checks
+    mock_parent = mocker.MagicMock()
+    mock_parent.exists.return_value = True
+    mock_path.return_value.parent = mock_parent
+
+    # Run the lifespan function within a client startup
+    with TestClient(app):
+        pass
+
+    # Assertions
+    mock_init_db.assert_called_once()
+    mock_path.assert_called_with("dummy/path/for/testing.sqlite")
+    mock_os_access.assert_called_with(mock_parent, os.W_OK)
+
+
+def test_lifespan_volume_not_mounted(mocker):
+    """Tests startup failure if the database directory doesn't exist."""
+    mocker.patch("backend.main.DB_PATH", "dummy/path/for/testing.sqlite")
+
+    mocker.patch("backend.main.init_database")
+    mock_path = mocker.patch("backend.main.Path")
+
+    mock_parent = mocker.MagicMock()
+    mock_parent.exists.return_value = False  # Simulate volume not mounted
+    mock_path.return_value.parent = mock_parent
+
+    with pytest.raises(RuntimeError, match="Database volume not found"), TestClient(app):
+        pass
+
+
+def test_lifespan_volume_not_writable(mocker):
+    """Tests startup failure if the database directory is not writable."""
+    mocker.patch("backend.main.DB_PATH", "dummy/path/for/testing.sqlite")
+    mocker.patch("backend.main.init_database")
+    mock_path = mocker.patch("backend.main.Path")
+    # Here's the key part: os.access returns False
+    mocker.patch("os.access", return_value=False)
+
+    mock_parent = mocker.MagicMock()
+    mock_parent.exists.return_value = True
+    mock_path.return_value.parent = mock_parent
+
+    with pytest.raises(RuntimeError, match="Database volume not writable"), TestClient(app):
+        pass
+
+
+def test_sync_full_invalid_date_format(mocker, mock_sync_time_entries):
+    """
+    Tests that sync_full defaults to 2006-01-01 if SYNC_START_DATE is malformed.
+    """
+    # Mock the logger to capture its output
+    mock_logger_warning = mocker.patch("backend.main.logger.warning")
+
+    # Set a bad date format in the environment
+    with patch.dict(os.environ, {"SYNC_START_DATE": "not-a-date"}):
+        response = simple_client.post("/sync/full")
+
+    assert response.status_code == 200
+
+    # Check that a warning was logged
+    mock_logger_warning.assert_called_once_with(
+        "Invalid SYNC_START_DATE format: 'not-a-date'. "
+        "Please use YYYY-MM-DD. Defaulting to 2006-01-01."
+    )
+
+    first_call_args = mock_sync_time_entries.call_args_list[0].args
+    assert first_call_args[0] == date(2006, 1, 1)
+
+
 def test_epoch_from_dt_correct():
     # This test is moved out of the main test file because it doesn't need the app
     from backend.main import _epoch_from_dt
@@ -99,6 +177,30 @@ def test_sync_recent_endpoint(mock_sync_time_entries):
     response = simple_client.post("/sync/recent")
     assert response.status_code == 200
     assert response.json()["ok"] is True
+
+
+def test_sync_full_api_error(mock_sync_time_entries):
+    """Test that a sync failure is handled and returns a 500 error."""
+    mock_sync_time_entries.side_effect = Exception("Toggl API is down")
+    response = simple_client.post("/sync/full")
+    assert response.status_code == 500
+    assert "Toggl API is down" in response.text
+
+
+def test_sync_recent_api_error(mock_sync_time_entries):
+    """Test that a recent sync failure is handled and returns a 500 error."""
+    mock_sync_time_entries.side_effect = Exception("Toggl API is down for recent sync")
+    response = simple_client.post("/sync/recent")
+    assert response.status_code == 500
+    assert "Toggl API is down for recent sync" in response.text
+
+
+def test_get_current_entry_api_error(mock_get_current_entry):
+    """Test that a failure in fetching the current entry returns a 500 error."""
+    mock_get_current_entry.side_effect = Exception("Could not fetch current entry")
+    response = simple_client.get("/sync/current")
+    assert response.status_code == 500
+    assert "Could not fetch current entry" in response.text
 
 
 def test_get_current_entry_endpoint(mock_get_current_entry):
@@ -127,6 +229,13 @@ def test_sync_full_endpoint_chunks_requests(mock_date, mock_sync_time_entries):
     mock_sync_time_entries.assert_has_calls(expected_calls)
 
 
+# THIS IS THE CORRECT VERSION
+def test_health_check():
+    response = simple_client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 # ===================================================================
 # SECTION 2: Tests that DO require an isolated database
 # (These all use the overridden `client` fixture)
@@ -147,6 +256,73 @@ def test_get_time_entries_empty(client):
     resp = client.get("/time_entries?start_iso=2025-01-01T00:00:00Z&end_iso=2025-01-02T00:00:00Z")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# Add to backend/test_main.py
+
+
+def test_get_projects_endpoint(client, test_db):
+    """
+    Tests that the /projects endpoint correctly returns a sorted list
+    of unique project names from the database.
+    """
+    # Setup: Add data with duplicate and unsorted project names to the test DB
+    conn = test_db
+    entries_to_insert = [
+        # (entry_id, description, project_id, project_name, seconds, start, at, start_ts, at_ts)
+        (
+            1,
+            "desc1",
+            100,
+            "Project Zebra",
+            3600,
+            "2025-01-01T10:00:00Z",
+            "2025-01-01T10:00:00Z",
+            1735725600,
+            1735725600,
+        ),
+        (
+            2,
+            "desc2",
+            101,
+            "Project Alpha",
+            1800,
+            "2025-01-01T11:00:00Z",
+            "2025-01-01T11:00:00Z",
+            1735729200,
+            1735729200,
+        ),
+        (
+            3,
+            "desc3",
+            100,
+            "Project Zebra",
+            1200,
+            "2025-01-01T12:00:00Z",
+            "2025-01-01T12:00:00Z",
+            1735732800,
+            1735732800,
+        ),
+    ]
+
+    # Use executemany for clean insertion
+    conn.executemany(
+        """
+        INSERT INTO time_entries
+          (entry_id, description, project_id, project_name, seconds, start, at, start_ts, at_ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        entries_to_insert,
+    )
+    conn.commit()
+
+    # Act: Call the API endpoint
+    response = client.get("/projects")
+
+    # Assert: Check the response
+    assert response.status_code == 200
+    # The endpoint should return a list of unique project names, sorted alphabetically.
+    assert response.json() == ["Project Alpha", "Project Zebra"]
 
 
 def test_create_and_delete_note(client, test_db):

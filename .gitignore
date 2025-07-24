@@ -36,6 +36,11 @@ backend/**/*.ipynb
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+backend/**/.coverage
+backend/**/cov.json
+backend/**/cov_annotate/
+backend/.coverage
+.coverage
 
 # --- Node / Frontend ---
 node_modules/
