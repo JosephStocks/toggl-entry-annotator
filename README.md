@@ -1,6 +1,6 @@
 # Sync Toggl Track Events
 
-This is a full-stack application for syncing [Toggl Track](https://toggl.com/track/) time entries to a local database. It provides a web interface to view, filter, and annotate your time entries with personal notes.
+This is a full-stack application for syncing [Toggl Track](https://toggl.com/track/) time entries to a local database. It provides a private web interface to view, filter, and annotate your time entries with personal notes and daily summaries.
 
 The main motivation is to have a private, enhanced view of your Toggl data, allowing for more detailed annotations and daily summaries than Toggl's native features provide.
 
@@ -10,21 +10,22 @@ The main motivation is to have a private, enhanced view of your Toggl data, allo
     - Built with [FastAPI](https://fastapi.tiangolo.com/).
     - Syncs Toggl time entries into a local [SQLite](https://www.sqlite.org/index.html) database.
     - Provides a REST API for the frontend to consume.
+    - Automated nightly backups of the database to a cloud provider (e.g., Google Drive) using `rclone` and `supercronic`.
     - Containerized with Docker for consistent deployments.
 
 - **Frontend**:
     - Built with [React](https://reactjs.org/), [Vite](https://vitejs.dev/), and [TypeScript](https://www.typescriptlang.org/).
     - UI components from the [Mantine](https://mantine.dev/) library.
     - Uses [TanStack React Query](https://tanstack.com/query/latest) for data fetching, caching, and optimistic UI updates.
-    - Daily view of time entries with navigation.
-    - A markdown-enabled editor for daily "end-of-day" notes.
-    - Add and delete notes on individual time entries.
+    - Daily view of time entries with easy navigation.
+    - A markdown-enabled editor for daily "end-of-day" notes, complete with a preview mode and export functionality.
+    - Ability to add and delete notes on individual time entries.
     - Filter entries by project.
     - Displays the currently running Toggl timer with a live-updating duration.
 
 ## Architecture
 
-The project is a classic client-server application.
+The project is a classic client-server application. The backend runs on a server, periodically syncing data from the Toggl API into an SQLite database. The frontend is a single-page application that interacts with the backend's API to display and manipulate the data.
 
 ```mermaid
 graph TD
@@ -32,21 +33,25 @@ graph TD
         Frontend[React App]
     end
 
-    subgraph Server
+    subgraph "Server (Fly.io)"
         Backend[FastAPI Server]
+        Cron[Supercronic Cron] --> BackupScript[backup.sh]
     end
 
-    subgraph Local Storage
+    subgraph "Local Storage (Fly.io Volume)"
         Database[(SQLite DB)]
     end
 
-    subgraph External Services
+    subgraph "External Services"
         Toggl[Toggl Track API]
+        CloudBackup[Cloud Storage]
     end
 
     Frontend <-- HTTP API --> Backend
     Backend  <-- Sync --> Toggl
     Backend  <-- CRUD --> Database
+    BackupScript --> Database
+    BackupScript --> CloudBackup
 ```
 
 ## Setup and Running
@@ -74,7 +79,7 @@ The backend server is responsible for syncing data from Toggl and providing it t
     Now, edit `.env` and fill in your details:
     -   `TOGGL_TOKEN`: Your Toggl API token, found on your [profile page](https://track.toggl.com/profile).
     -   `WORKSPACE_ID`: Find this in the URL of your Toggl workspace (e.g., `https://track.toggl.com/reports/summary/<WORKSPACE_ID>`).
-    -   **(New)** `DB_PATH`: For local development, set this to the relative path where you want the database stored. The recommended default is: `DB_PATH="data/time_tracking.sqlite"`
+    -   `DB_PATH`: For local development, set this to the relative path where you want the database stored. The recommended default is: `DB_PATH="data/time_tracking.sqlite"`
 
 3.  **Install Python dependencies:**
     ```bash
@@ -82,7 +87,7 @@ The backend server is responsible for syncing data from Toggl and providing it t
     ```
 
 4.  **Initialize the Database:**
-    **(New & Simplified)** The database and its tables are now created **automatically** the first time you run the server. No manual steps are needed.
+    The database and its tables are now created **automatically** the first time you run the server. No manual steps are needed.
 
 5.  **Run the Backend Server:**
     ```bash
@@ -115,6 +120,34 @@ The frontend provides the web interface for interacting with your synced data.
 
     **Note:** The Vite dev server is configured to proxy API requests (`/api`) to the backend at `http://localhost:4545`. If you change the backend port, update `frontend/vite.config.ts` accordingly.
 
+## Testing
+
+This project uses `pytest` for the backend and `vitest` for the frontend.
+
+### Backend
+
+From the `backend` directory:
+
+1.  **Run all tests:**
+    ```bash
+    uv run pytest
+    ```
+
+2.  **Run tests with code coverage:**
+    This command runs the tests and generates a coverage report in the `htmlcov/` directory.
+    ```bash
+    uv run pytest --cov
+    ```
+
+### Frontend
+
+From the `frontend` directory:
+
+1.  **Run all tests:**
+    ```bash
+    pnpm test
+    ```
+
 ## API Endpoints
 
 The backend exposes the following main endpoints:
@@ -126,8 +159,8 @@ The backend exposes the following main endpoints:
 -   `GET /projects`: Returns a list of all unique project names.
 -   `POST /notes`: Adds a note to a time entry.
 -   `DELETE /notes/{note_id}`: Deletes a note.
--   `GET /daily_notes/{date}`: Gets the daily note for a specific date.
--   `PUT /daily_notes/{date}`: Creates or updates the daily note for a date.
+-   `GET /daily_notes/{date}`: Gets the daily note for a specific date (YYYY-MM-DD).
+-   `PUT /daily_notes/{date}`: Creates or updates the daily note for a specific date.
 
 Check the backend code in `backend/main.py` for more details on the API.
 
@@ -142,6 +175,7 @@ The final architecture uses Cloudflare Zero Trust to protect both the frontend a
 - A registered domain name managed by Cloudflare.
 - Accounts for Fly.io, Netlify, and Cloudflare.
 - `flyctl` CLI installed.
+- `rclone` configured with a remote for database backups (e.g., `gdrive:`).
 
 ### 2. Backend Deployment on Fly.io
 
@@ -159,14 +193,17 @@ The final architecture uses Cloudflare Zero Trust to protect both the frontend a
     Your `fly.toml` is already configured to use this volume at the `/data` mount point.
 
 3.  **Set Secrets:**
-    The backend needs your Toggl credentials. Set them as secrets on Fly.io.
+    The backend needs your Toggl credentials and your `rclone.conf` for backups.
     ```bash
     # Replace with your actual app name and credentials
     flyctl secrets set TOGGL_TOKEN="YOUR_TOGGL_TOKEN" WORKSPACE_ID="YOUR_WORKSPACE_ID" --app your-app-name-api
+
+    # Encode your rclone.conf file and set it as a secret
+    flyctl secrets set RCLONE_CONF="$(cat ~/.config/rclone/rclone.conf | base64)" --app your-app-name-api
     ```
 
 4.  **Deploy the Backend:**
-    **(New & Simplified)** Since the repository already contains a configured `fly.toml`, you do not need to run `launch`. Simply deploy the existing configuration:
+    Since the repository already contains a configured `fly.toml`, you do not need to run `launch`. Simply deploy the existing configuration:
     ```bash
     flyctl deploy --config backend/fly.toml
     ```
@@ -198,16 +235,14 @@ The final architecture uses Cloudflare Zero Trust to protect both the frontend a
     In the Netlify dashboard, add a new site and connect it to the Git repository containing this project.
 
 2.  **Configure Build Settings:**
-    Netlify needs to know how to build the site from the `frontend` subdirectory. Ensure your settings are:
+    Netlify needs to know how to build the site from the `frontend` subdirectory.
     - **Base directory:** `frontend`
     - **Build command:** `pnpm run build`
     - **Publish directory:** `dist`
     The `frontend/netlify.toml` file in this repository is already configured with these settings.
 
 3.  **(Optional) Add Service-Token Environment Variables**
-    If you decide to re-enable the backend's *service-token* middleware (see below),
-    Netlify must be able to inject those headers.  Add the following build-time
-    variables under **Site settings → Build & deploy → Environment**:
+    If you decide to re-enable the backend's *service-token* middleware (see below), Netlify must be able to inject those headers. Add the following build-time variables under **Site settings → Build & deploy → Environment**:
     - `VITE_CF_ACCESS_CLIENT_ID` – the Service-Token *Client ID*
     - `VITE_CF_ACCESS_CLIENT_SECRET` – the Service-Token *Client Secret*
     (Variables need the `VITE_` prefix so Vite exposes them to the browser bundle.)
@@ -223,7 +258,7 @@ This is the final step to secure your application.
     - In the Cloudflare Zero Trust dashboard, go to **Access > Service Auth**.
     - Click **Create Service Token**.
     - Name it (e.g., `Netlify Proxy`), and click **Generate token**.
-    - **Important:** Copy the `Client ID` and `Client Secret`. Add them to your Netlify environment variables as described in the previous section.
+    - **Important:** Copy the `Client ID` and `Client Secret`. Add them to your Netlify environment variables as described in the previous section if you choose to use them.
 
 2.  **Create the Frontend Application:**
     - Go to **Access > Applications** and **Add an application** of type **Self-hosted**.
@@ -231,36 +266,15 @@ This is the final step to secure your application.
     - **Application domain:** `your-app-name.your-domain.com`
     - **Policies:** Create an `Allow` policy that requires authentication from your chosen provider (e.g., a rule for `Emails` matching your Google account).
 
-3.  **Create the Backend Application (Service-token route, optional):**
-    The backend can be left behind Cloudflare Access *without* a service token
-    because the API is consumed only by you and your spouse.  If you later want
-    automated jobs (or another site) to call protected routes, create an Access
-    **Service Token** and attach it here.  The policies would look like:
-        - **Policy 1: Allow Service-Token** (action: *Service Auth*)
-        - **Policy 2: Allow Interactive Login** (action: *Allow* → email match)
-
-    The backend code expects the token values in environment variables
-    `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (Fly secrets).
-
-4.  **Create the Backend Application:**
+3.  **Create the Backend Application:**
     - Add another **Self-hosted** application.
     - **Application name:** `Your App Name Backend`
     - **Application domain:** `api.your-domain.com`
-    - **Policies:** Create two policies. The order does not matter.
-        - **Policy 1: Allow Netlify**
-            - **Action:** `Service Auth`
-            - **Rule:** Create a rule where **Service Token** `is` the `Netlify Proxy` token you created.
-        - **Policy 2: Allow Your Login** (for accessing `/docs` in the browser)
-            - **Action:** `Allow`
-            - **Rule:** Create a rule for `Emails` matching your personal email.
-    - Save the application. You do not need to configure CORS settings for the backend app, as all requests come from the Netlify proxy.
+    - **Policies:** Create a policy to allow access. For simple two-person use, an `Allow` rule matching your and your spouse's email is sufficient. If you need automated jobs, you can create more complex policies involving service tokens.
 
 ### 6. (Optional) Re-enabling Service-token Checks
 
-`CloudflareServiceTokenMiddleware` is included in the backend but ships with an
-empty `protected_paths` set, meaning **no route is currently guarded**.  This
-fits the current use-case (two trusted users behind Cloudflare Access).  To
-lock down administrative routes again you can:
+`CloudflareServiceTokenMiddleware` is included in the backend but ships with an empty `protected_paths` set, meaning **no route is currently guarded**. This fits the current use-case (two trusted users behind Cloudflare Access). To lock down administrative routes again you can:
 
 ```python
 # main.py
@@ -270,13 +284,11 @@ app.add_middleware(
 )
 ```
 
-Set `CF_CHECK=true` (default) on Fly and provide the `CF_ACCESS_CLIENT_*`
-secrets.  The frontend must then send the two headers, which you can enable by
-defining `VITE_CF_ACCESS_CLIENT_*` at build time as shown above.
+Set `CF_CHECK=true` (default) on Fly and provide the `CF_ACCESS_CLIENT_*` secrets. The frontend must then send the two headers, which you can enable by defining `VITE_CF_ACCESS_CLIENT_*` at build time as shown above.
 
 ---
 
-Once these steps are complete, your application will be deployed and, depending on your chosen configuration, protected either by Cloudflare Access alone or by both Access **and** a service-token layer.
+Once these steps are complete, your application will be deployed and protected by Cloudflare Access.
 
 ## Future Improvements
 
